@@ -1,0 +1,6 @@
+{
+  "name": "MAYRA",
+  "description": "MAYRA - Android AI Assistant UI, Home Screen, Holographic Character, and Permissions Center with Jetpack Compose Architecture",
+  "requestFramePermissions": ["microphone", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

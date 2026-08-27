@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Solid dark background matching Mayra Cyber theme -->
+    <item>
+        <color android:color="#070914" />
+    </item>
+
+    <!-- Centered complete MAYRA logo artwork -->
+    <item
+        android:width="144dp"
+        android:height="144dp"
+        android:gravity="center"
+        android:drawable="@drawable/ic_launcher_foreground" />
+</layer-list>
