@@ -1,10 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { AndroidPhoneFrame } from './components/AndroidPhoneFrame';
+import { StonicxAppShell } from './components/stonicx/StonicxAppShell';
 import { SettingsSubScreen, ActiveTab, AppAction } from './types';
 import { useMayraAssistant } from './hooks/useMayraAssistant';
 import { useMayraPermissions } from './hooks/useMayraPermissions';
 import { useMayraSettings } from './hooks/useMayraSettings';
-import { OnboardingIntroModal } from './components/onboarding/OnboardingIntroModal';
+import { OnboardingFlowModal } from './components/onboarding/OnboardingFlowModal';
 
 export default function App() {
   // Initial App Startup / Splash screen state
@@ -271,59 +273,102 @@ export default function App() {
     }
   };
 
+  const isStonicxMode = assistantConfig.activeMode === 'stonicx';
+
   return (
     <div className={`fixed inset-0 w-screen h-[100dvh] min-h-screen overflow-hidden font-sans select-none flex flex-col transition-colors duration-200 ${
-      appearanceConfig.darkMode ? 'bg-[#070913] text-slate-200' : 'bg-slate-50 text-slate-800'
+      isStonicxMode ? 'bg-[#04060A] text-slate-100' : (appearanceConfig.darkMode ? 'bg-[#070913] text-slate-200' : 'bg-slate-50 text-slate-800')
     }`}>
-      <AndroidPhoneFrame
-        activeTab={activePhoneTab}
-        setActiveTab={setActivePhoneTab}
-        isSettingsOpen={isSettingsOpen}
-        setIsSettingsOpen={setIsSettingsOpen}
-        currentSubScreen={currentSubScreen}
-        setCurrentSubScreen={setCurrentSubScreen}
-        status={status}
-        isListeningMode={isListeningMode}
-        inputText={inputText}
-        setInputText={setInputText}
-        onSubmitPrompt={(text, img) => submitPrompt(text, img)}
-        onTriggerVoice={triggerVoice}
-        onSelectRoutineAction={handleSelectRoutineAction}
-        onSendVisionQuery={handleSendVisionQuery}
-        onClearChat={clearChat}
-        activeAgentTask={activeAgentTask}
-        onApproveAgentAction={approveAgentAction}
-        onRejectAgentAction={rejectAgentAction}
-        onCancelAgentTask={cancelAgentTask}
+      <AnimatePresence mode="wait">
+        {isStonicxMode ? (
+          <motion.div
+            key="stonicx-app-shell"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.25 }}
+            className="w-full h-full"
+          >
+            <StonicxAppShell
+              onSwitchToMayra={() => {
+                setAssistantConfig((prev) => ({ ...prev, activeMode: 'mayra' }));
+              }}
+              personalConfig={personalConfig}
+              setPersonalConfig={setPersonalConfig}
+              assistantConfig={assistantConfig}
+              setAssistantConfig={setAssistantConfig}
+              permissions={permissions}
+              setPermissions={setPermissions}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="mayra-app-shell"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.25 }}
+            className="w-full h-full flex flex-col"
+          >
+            <AndroidPhoneFrame
+              activeTab={activePhoneTab}
+              setActiveTab={setActivePhoneTab}
+              isSettingsOpen={isSettingsOpen}
+              setIsSettingsOpen={setIsSettingsOpen}
+              currentSubScreen={currentSubScreen}
+              setCurrentSubScreen={setCurrentSubScreen}
+              status={status}
+              isListeningMode={isListeningMode}
+              inputText={inputText}
+              setInputText={setInputText}
+              onSubmitPrompt={(text, img) => submitPrompt(text, img)}
+              onTriggerVoice={triggerVoice}
+              onSelectRoutineAction={handleSelectRoutineAction}
+              onSendVisionQuery={handleSendVisionQuery}
+              onClearChat={clearChat}
+              activeAgentTask={activeAgentTask}
+              onApproveAgentAction={approveAgentAction}
+              onRejectAgentAction={rejectAgentAction}
+              onCancelAgentTask={cancelAgentTask}
+              personalConfig={personalConfig}
+              setPersonalConfig={setPersonalConfig}
+              assistantConfig={assistantConfig}
+              setAssistantConfig={setAssistantConfig}
+              appearanceConfig={appearanceConfig}
+              setAppearanceConfig={setAppearanceConfig}
+              voiceGuardianConfig={voiceGuardianConfig}
+              setVoiceGuardianConfig={setVoiceGuardianConfig}
+              advancedConfig={advancedConfig}
+              setAdvancedConfig={setAdvancedConfig}
+              permissions={permissions}
+              setPermissions={setPermissions}
+              skills={skills}
+              setSkills={setSkills}
+              subAgents={subAgents}
+              setSubAgents={setSubAgents}
+              integrations={integrations}
+              memories={memories}
+              setMemories={setMemories}
+              messages={messages}
+              setMessages={setMessages}
+              onOpenOnboarding={() => setIsOnboardingOpen(true)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 0. FIRST LAUNCH / INTERACTIVE 6-STEP ONBOARDING TOUR */}
+      <OnboardingFlowModal
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
         personalConfig={personalConfig}
         setPersonalConfig={setPersonalConfig}
         assistantConfig={assistantConfig}
         setAssistantConfig={setAssistantConfig}
         appearanceConfig={appearanceConfig}
         setAppearanceConfig={setAppearanceConfig}
-        voiceGuardianConfig={voiceGuardianConfig}
-        setVoiceGuardianConfig={setVoiceGuardianConfig}
-        advancedConfig={advancedConfig}
-        setAdvancedConfig={setAdvancedConfig}
         permissions={permissions}
         setPermissions={setPermissions}
-        skills={skills}
-        setSkills={setSkills}
-        subAgents={subAgents}
-        setSubAgents={setSubAgents}
-        integrations={integrations}
-        memories={memories}
-        setMemories={setMemories}
-        messages={messages}
-        setMessages={setMessages}
-        onOpenOnboarding={() => setIsOnboardingOpen(true)}
-      />
-
-      {/* 0. FIRST LAUNCH / INTERACTIVE ONBOARDING TOUR */}
-      <OnboardingIntroModal
-        isOpen={isOnboardingOpen}
-        onClose={() => setIsOnboardingOpen(false)}
-        userName={personalConfig.preferredName || personalConfig.fullName || 'Zafer'}
       />
 
       {/* 1. APP STARTUP / SPLASH SCREEN (Centered Complete MAYRA Logo, No Text, No Cropping) */}

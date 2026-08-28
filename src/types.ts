@@ -203,7 +203,10 @@ export interface UserPersonalConfig {
   temperature: number;
 }
 
+export type AssistantMode = 'mayra' | 'stonicx';
+
 export interface AssistantConfig {
+  activeMode?: AssistantMode; // 'mayra' | 'stonicx' (persisted active app-shell mode)
   personaTone: 'executive' | 'friendly' | 'technical' | 'concise';
   voiceProfile: string;
   language: string;

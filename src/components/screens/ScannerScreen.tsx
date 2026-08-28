@@ -226,7 +226,7 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
         <div className="w-full px-2 py-1 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <div className="p-1.5 bg-cyan-500/10 text-cyan-300 rounded-xl border border-cyan-400/30 backdrop-blur-xl shadow-[0_0_12px_rgba(6,182,212,0.25)]">
-              <ScanLine className="w-4 h-4 text-cyan-400" />
+              <ScanLine className="w-4 h-4 text-cyan-400 stroke-[1.8]" />
             </div>
             <div>
               <h2 className="text-xs font-semibold text-white tracking-wide">Vision Scanner</h2>
@@ -247,7 +247,7 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
               }`}
               title="Continuous Live Camera Stream"
             >
-              <Radio className="w-3 h-3" />
+              <Radio className="w-3 h-3 stroke-[1.8]" />
               <span>LIVE</span>
             </motion.button>
 
@@ -262,7 +262,7 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
               }`}
               title="Toggle Flashlight"
             >
-              <Flashlight className="w-4 h-4" />
+              <Flashlight className="w-4 h-4 stroke-[1.8]" />
             </motion.button>
 
             <motion.button
@@ -272,7 +272,7 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
               className="p-2 bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 rounded-xl text-slate-300 transition-all backdrop-blur-xl cursor-pointer"
               title="Switch Camera"
             >
-              <FlipHorizontal className="w-4 h-4" />
+              <FlipHorizontal className="w-4 h-4 stroke-[1.8]" />
             </motion.button>
           </div>
         </div>
@@ -373,7 +373,7 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
                     : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="w-3.5 h-3.5 stroke-[1.8]" />
                 <span>{mode.label}</span>
               </motion.button>
             );

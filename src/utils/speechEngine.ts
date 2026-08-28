@@ -274,6 +274,18 @@ export function flushQueuedAudio(): void {
 }
 
 /**
+ * Play a standalone 24kHz raw PCM float buffer audio block directly (e.g. from /api/voice/speak or /api/chat)
+ */
+export function playPcmAudio(
+  base64Data: string,
+  onStart?: () => void,
+  onEnded?: () => void
+): boolean {
+  flushQueuedAudio();
+  return schedulePcm24kChunk(base64Data, onStart, onEnded);
+}
+
+/**
  * Checks if voice audio is currently playing
  */
 export function isAudioPlaying(): boolean {

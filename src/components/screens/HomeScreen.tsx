@@ -13,13 +13,15 @@ import { getDynamicSuggestions } from '../../utils/dynamicSuggestions';
 import { 
   Settings as SettingsIcon, Send, Paperclip, 
   Sparkles, ScreenShare, Lock, Unlock, FileText, 
-  X, PenTool, Hand
+  X, PenTool, Hand, Zap, Smartphone, ChevronDown, Check, Cpu
 } from 'lucide-react';
 
 interface HomeScreenProps {
   status: AssistantStatus;
   personalConfig: UserPersonalConfig;
   assistantConfig: AssistantConfig;
+  setAssistantConfig?: React.Dispatch<React.SetStateAction<AssistantConfig>>;
+  onSwitchMode?: (mode: 'mayra' | 'stonicx') => void;
   appearanceConfig?: AppearanceConfig;
   permissions: PermissionItem[];
   messages?: ChatMessage[];
@@ -31,6 +33,8 @@ interface HomeScreenProps {
   onOpenSettings: () => void;
   onOpenPermissions: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenRoutines?: () => void;
+  onOpenWidgetGuide?: () => void;
   modelMetadata?: CharacterModelMetadata;
   proactiveEnabled?: boolean;
 }
@@ -39,6 +43,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   status,
   personalConfig,
   assistantConfig,
+  setAssistantConfig,
+  onSwitchMode,
   appearanceConfig,
   permissions,
   messages = [],
@@ -50,6 +56,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenSettings,
   onOpenPermissions,
   onOpenWhiteboard,
+  onOpenRoutines,
+  onOpenWidgetGuide,
   modelMetadata,
   proactiveEnabled = true
 }) => {
@@ -90,6 +98,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [attachedFile, setAttachedFile] = useState<AttachmentItem | null>(null);
   const [isAttachmentSheetOpen, setIsAttachmentSheetOpen] = useState<boolean>(false);
   const [isProactivePromptActive, setIsProactivePromptActive] = useState<boolean>(false);
+  const [isSwitcherOpen, setIsSwitcherOpen] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -373,22 +382,158 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {/* 3. MINIMAL TOP FLOATING HEADER (Clean & Uncluttered with animated icons) */}
       <div className="relative z-20 w-full px-3.5 pt-2 flex flex-col gap-1.5 pointer-events-auto">
         <header className="w-full flex items-center justify-between">
-          {/* Left: MAYRA Branding with Styled Name & Online Status */}
-          <div className="flex items-center gap-2 min-w-0">
-            <MayraLogo size={28} showGlow={true} variant="raw" />
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="font-sans font-bold text-sm text-white tracking-wide truncate">
-                ★𝐌₳ᎽⱤ₳ ᥫ᭡
-              </span>
-              <div className={`px-2 py-0.5 rounded-full border text-[9px] font-mono font-bold tracking-wider flex items-center gap-1 shrink-0 ${statusBadge.badgeColor}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.dotColor} animate-ping`} />
-                <span>{statusBadge.label}</span>
+          {/* Left: MAYRA Branding with Account/Mode Switcher Dropdown */}
+          <div className="relative flex items-center gap-1.5 min-w-0">
+            <button
+              onClick={() => setIsSwitcherOpen(prev => !prev)}
+              className="flex items-center gap-1.5 min-w-0 bg-transparent hover:bg-white/10 active:scale-95 px-1 py-0.5 -ml-1 rounded-xl transition-all cursor-pointer group text-left"
+              title="Switch Assistant Mode (MAYRA / STONICX)"
+              aria-expanded={isSwitcherOpen}
+            >
+              <MayraLogo size={26} showGlow={true} variant="raw" />
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="font-sans font-bold text-sm text-white tracking-wide truncate group-hover:text-cyan-200 transition-colors">
+                  ★𝐌₳ᎽⱤ₳ ᥫ᭡
+                </span>
+                <motion.div
+                  animate={{ rotate: isSwitcherOpen ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="w-4 h-4 rounded-full bg-white/5 group-hover:bg-white/15 flex items-center justify-center text-slate-300 group-hover:text-white transition-colors"
+                >
+                  <ChevronDown className="w-3 h-3 stroke-[2.5]" />
+                </motion.div>
               </div>
+            </button>
+
+            <div className={`px-1.5 py-0.5 rounded-full border text-[8px] font-mono font-bold tracking-wider flex items-center gap-1 shrink-0 ${statusBadge.badgeColor}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.dotColor} animate-ping`} />
+              <span>{statusBadge.label}</span>
             </div>
+
+            {/* Dropdown Menu for Switching Assistant Mode (MAYRA / STONICX) */}
+            <AnimatePresence>
+              {isSwitcherOpen && (
+                <>
+                  {/* Backdrop to catch outside clicks */}
+                  <div
+                    className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]"
+                    onClick={() => setIsSwitcherOpen(false)}
+                  />
+
+                  <motion.div
+                    initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute left-0 top-11 z-50 w-64 p-2 bg-[#0C1022]/95 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] ring-1 ring-white/10 font-sans"
+                  >
+                    <div className="px-2.5 py-1 text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between border-b border-white/10 pb-1.5 mb-1.5">
+                      <span>Switch Assistant</span>
+                      <span className="text-[9px] text-cyan-400 font-bold">CORE SHELL</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      {/* Option 1: ⭐ MAYRA (Currently selected) */}
+                      <button
+                        onClick={() => {
+                          setIsSwitcherOpen(false);
+                          if (onSwitchMode) onSwitchMode('mayra');
+                          else if (setAssistantConfig) setAssistantConfig(prev => ({ ...prev, activeMode: 'mayra' }));
+                        }}
+                        className={`w-full p-2.5 rounded-xl text-left flex items-center justify-between transition-all cursor-pointer ${
+                          (assistantConfig.activeMode || 'mayra') === 'mayra'
+                            ? 'bg-gradient-to-r from-purple-950/80 to-cyan-950/80 border border-cyan-400/40 text-white shadow-[0_0_15px_rgba(6,182,212,0.2)]'
+                            : 'hover:bg-white/10 text-slate-300 border border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-white shadow-md text-sm font-bold">
+                            ⭐
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                              <span>MAYRA</span>
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-purple-500/20 text-purple-300 font-mono">3D AVATAR</span>
+                            </div>
+                            <div className="text-[10px] text-slate-300">Spatial companion & routines</div>
+                          </div>
+                        </div>
+                        {(assistantConfig.activeMode || 'mayra') === 'mayra' && (
+                          <div className="w-5 h-5 rounded-full bg-cyan-500/20 border border-cyan-400 flex items-center justify-center text-cyan-300 shrink-0">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </div>
+                        )}
+                      </button>
+
+                      {/* Option 2: ⚡ STONICX */}
+                      <button
+                        onClick={() => {
+                          setIsSwitcherOpen(false);
+                          if (onSwitchMode) onSwitchMode('stonicx');
+                          else if (setAssistantConfig) setAssistantConfig(prev => ({ ...prev, activeMode: 'stonicx' }));
+                        }}
+                        className={`w-full p-2.5 rounded-xl text-left flex items-center justify-between transition-all cursor-pointer ${
+                          assistantConfig.activeMode === 'stonicx'
+                            ? 'bg-gradient-to-r from-amber-950/80 to-stone-950/80 border border-amber-400/40 text-white shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                            : 'hover:bg-amber-500/10 text-slate-300 border border-amber-500/20 hover:border-amber-500/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-black shadow-md text-sm font-bold">
+                            ⚡
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                              <span>STONICX</span>
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">CIRCUIT OS</span>
+                            </div>
+                            <div className="text-[10px] text-amber-200/70">Living silicon quantum terminal</div>
+                          </div>
+                        </div>
+                        {assistantConfig.activeMode === 'stonicx' && (
+                          <div className="w-5 h-5 rounded-full bg-amber-500/20 border border-amber-400 flex items-center justify-center text-amber-300 shrink-0">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </div>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="mt-2 pt-2 border-t border-white/10 px-1 text-[9px] text-slate-400 flex items-center justify-between font-mono">
+                      <span>Shared System Permissions</span>
+                      <span className="text-cyan-400">INSTANT DUAL-CORE</span>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Right: Sleek Pure Action Icons with Spring Hover & Tap animations */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            {onOpenRoutines && (
+              <motion.button
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.88 }}
+                onClick={onOpenRoutines}
+                className="p-1 bg-transparent border-0 text-amber-300 hover:text-amber-200 transition-colors cursor-pointer"
+                title="Smart Shortcuts & Dinacharya"
+              >
+                <Zap className="w-4 h-4 stroke-[2]" />
+              </motion.button>
+            )}
+
+            {onOpenWidgetGuide && (
+              <motion.button
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.88 }}
+                onClick={onOpenWidgetGuide}
+                className="p-1 bg-transparent border-0 text-cyan-300 hover:text-cyan-200 transition-colors cursor-pointer"
+                title="Android Quick Widget Preview"
+              >
+                <Smartphone className="w-4 h-4 stroke-[1.8]" />
+              </motion.button>
+            )}
+
             {onOpenWhiteboard && (
               <motion.button
                 whileHover={{ scale: 1.15 }}
@@ -397,7 +542,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 className="p-1 bg-transparent border-0 text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
                 title="Interactive Whiteboard Tool"
               >
-                <PenTool className="w-4 h-4" />
+                <PenTool className="w-4 h-4 stroke-[1.8]" />
               </motion.button>
             )}
 
@@ -419,7 +564,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   : 'Enable Barehands Hand Tracking (Rotate & Zoom via Gestures)'
               }
             >
-              <Hand className={`w-4 h-4 ${isHandTrackingLoading ? 'animate-pulse text-cyan-400' : ''}`} />
+              <Hand className={`w-4 h-4 stroke-[1.8] ${isHandTrackingLoading ? 'animate-pulse text-cyan-400' : ''}`} />
             </motion.button>
 
             {/* Screen Share / Cast Button */}
@@ -434,7 +579,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               }`}
               title={isScreenSharing ? 'Disconnect Screen Share' : 'Connect Screen Stream'}
             >
-              <ScreenShare className="w-4 h-4" />
+              <ScreenShare className="w-4 h-4 stroke-[1.8]" />
             </motion.button>
 
             {/* Character Lock / Unlock Button */}
@@ -446,9 +591,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               title={lockState.isLocked ? 'Character Locked' : 'Character Unlocked'}
             >
               {lockState.isLocked ? (
-                <Lock className="w-4 h-4 text-amber-400 drop-shadow-[0_0_10px_rgba(245,158,11,0.9)]" />
+                <Lock className="w-4 h-4 text-amber-400 drop-shadow-[0_0_10px_rgba(245,158,11,0.9)] stroke-[1.8]" />
               ) : (
-                <Unlock className="w-4 h-4 text-slate-300 hover:text-white" />
+                <Unlock className="w-4 h-4 text-slate-300 hover:text-white stroke-[1.8]" />
               )}
             </motion.button>
 
@@ -460,7 +605,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               className="p-1 bg-transparent border-0 text-cyan-400 hover:text-cyan-300 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)] transition-colors group cursor-pointer"
               title={`Settings (${userName})`}
             >
-              <SettingsIcon className="w-4 h-4 animate-[spin_10s_linear_infinite]" />
+              <SettingsIcon className="w-4 h-4 animate-[spin_10s_linear_infinite] stroke-[1.8]" />
             </motion.button>
           </div>
         </header>

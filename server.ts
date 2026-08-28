@@ -242,12 +242,21 @@ function detectLang(text: string): 'hi' | 'en' {
   return 'en';
 }
 
+// Global Circuit Breaker for Gemini TTS Quota / Rate-Limit
+let ttsQuotaExhaustedUntil: number = 0;
+
 /**
- * Generates natural, human-like voice response using Gemini Audio TTS (Voice: Aoede)
- * Gracefully handles 429 quota limitations without failing the conversation.
+ * Generates natural, human-like voice response using Gemini Audio TTS
+ * Uses 'Charon' (Deep Authoritative Male) for STONICX and 'Aoede' for MAYRA.
+ * Gracefully handles 429 quota limitations with a circuit-breaker without failing or logging error dumps.
  */
-async function generateAoedeVoiceAudio(text: string, language?: string): Promise<{ audioBase64: string; mimeType: string } | null> {
+async function generateGeminiVoiceAudio(text: string, language?: string, voiceName: string = 'Charon'): Promise<{ audioBase64: string; mimeType: string } | null> {
   if (!process.env.GEMINI_API_KEY || !text || text.trim().length === 0) {
+    return null;
+  }
+
+  // If we recently encountered a 429 / RESOURCE_EXHAUSTED quota limit, skip calling the preview TTS API
+  if (Date.now() < ttsQuotaExhaustedUntil) {
     return null;
   }
 
@@ -268,7 +277,7 @@ async function generateAoedeVoiceAudio(text: string, language?: string): Promise
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: {
-              voiceName: 'Aoede'
+              voiceName: voiceName || 'Charon'
             }
           }
         }
@@ -276,7 +285,7 @@ async function generateAoedeVoiceAudio(text: string, language?: string): Promise
     });
 
     const timeoutPromise = new Promise<null>((_, reject) =>
-      setTimeout(() => reject(new Error('TTS_TIMEOUT')), 3200)
+      setTimeout(() => reject(new Error('TTS_TIMEOUT')), 3500)
     );
 
     const response = await Promise.race([callPromise, timeoutPromise]) as any;
@@ -293,8 +302,17 @@ async function generateAoedeVoiceAudio(text: string, language?: string): Promise
       }
     }
   } catch (err: any) {
-    // If direct TTS is unavailable, log notice and return null
-    console.log('[Gemini Voice Engine] Gemini direct TTS notice.');
+    const errMsg = (err?.message || '').toLowerCase();
+    const errStatus = err?.status || err?.code || '';
+    const isQuotaOrRateLimit = errMsg.includes('quota') || errMsg.includes('429') || errMsg.includes('resource_exhausted') || errStatus === 'RESOURCE_EXHAUSTED' || errStatus === 429;
+
+    if (isQuotaOrRateLimit) {
+      // Pause TTS calls for 60 seconds and gracefully fall back to local voice synthesis without spamming logs
+      ttsQuotaExhaustedUntil = Date.now() + 60000;
+      console.log('[Gemini Voice Engine] Gemini TTS preview quota reached. Circuit-breaker active for 60s (using high-fidelity client voice synthesis).');
+    } else {
+      console.log('[Gemini Voice Engine] Gemini direct TTS notice: fallback to client speech synthesis.');
+    }
     return null;
   }
 
@@ -445,30 +463,31 @@ app.use(['/tex', '/tex/*'], (req, res) => {
   res.end(transparent1x1);
 });
 
-// Dedicated Voice Synthesis Endpoint: Returns natural human-like Aoede audio or instructs fallback
+// Dedicated Voice Synthesis Endpoint: Returns natural human-like Charon/Aoede audio
 app.post('/api/voice/speak', async (req, res) => {
   try {
-    const { text, language } = req.body;
+    const { text, language, voiceName = 'Charon', assistant = 'stonicx' } = req.body;
     if (!text || typeof text !== 'string') {
       return res.status(400).json({ error: 'Text is required' });
     }
 
-    const audioResult = await generateAoedeVoiceAudio(text, language);
+    const effectiveVoice = (assistant === 'stonicx' || voiceName === 'Charon') ? 'Charon' : (voiceName || 'Aoede');
+    const audioResult = await generateGeminiVoiceAudio(text, language, effectiveVoice);
     if (audioResult) {
       return res.json({
         success: true,
         audioBase64: audioResult.audioBase64,
         mimeType: audioResult.mimeType,
         sampleRate: 24000,
-        voiceName: 'Aoede'
+        voiceName: effectiveVoice
       });
     }
 
-    // If direct TTS audio is not generated, cleanly return null audio without browser fallback
+    // If direct TTS audio is not generated, cleanly return null audio
     return res.json({
       success: false,
       audioBase64: null,
-      message: 'Direct Aoede voice audio not available'
+      message: 'Direct voice audio not available'
     });
   } catch (err: any) {
     console.error('Error in /api/voice/speak:', err);
@@ -753,7 +772,10 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // Creator check
+    const isStonicx = req.body.assistant === 'stonicx' || req.body.persona === 'technical' || (typeof req.body.contextPrompt === 'string' && req.body.contextPrompt.includes('STONICX'));
+    const effectiveVoice = isStonicx ? 'Charon' : 'Aoede';
+
+    // Creator / Identity check
     if (
       lowerMsg.includes('who created you') ||
       lowerMsg.includes('who made you') ||
@@ -762,13 +784,34 @@ app.post('/api/chat', async (req, res) => {
       lowerMsg.includes('who built you') ||
       lowerMsg.includes('tumhe kisne banaya') ||
       lowerMsg.includes('aapko kisne banaya') ||
-      lowerMsg.includes('kisne banaya')
+      lowerMsg.includes('kisne banaya') ||
+      (isStonicx && (
+        lowerMsg === 'hi' || lowerMsg === 'hello' || lowerMsg === 'hey' ||
+        lowerMsg.includes('tum kaun ho') || lowerMsg.includes('who are you') || lowerMsg.includes('kya karte ho') || lowerMsg.includes('intro')
+      ))
     ) {
-      const creatorResponse = (language === 'hi' || lowerMsg.includes('kisne'))
-        ? 'Mujhe Zafer ne banaya hai.'
-        : 'I was created by Zafer.';
+      let creatorResponse = '';
+      if (isStonicx) {
+        if (lowerMsg === 'hi' || lowerMsg === 'hello' || lowerMsg === 'hey') {
+          creatorResponse = (language === 'hi' || lowerMsg.includes('namaste'))
+            ? 'STONICX Core operational hai. Main aapki command ke liye ready hoon.'
+            : 'STONICX Core online and operational. Standing by for command directives.';
+        } else if (lowerMsg.includes('tum kaun ho') || lowerMsg.includes('who are you') || lowerMsg.includes('kya karte ho') || lowerMsg.includes('intro')) {
+          creatorResponse = (language === 'hi')
+            ? 'Main STONICX hoon — ek autonomous high-performance cybernetic AI operating system aur neural computing workstation.'
+            : 'I am STONICX, an autonomous high-performance cybernetic AI operating system and neural computing workstation.';
+        } else {
+          creatorResponse = (language === 'hi' || lowerMsg.includes('kisne'))
+            ? 'Main STONICX hoon — ek autonomous high-performance cybernetic AI operating system aur neural computing workstation.'
+            : 'I am STONICX, an autonomous high-performance cybernetic AI operating system and neural computing workstation.';
+        }
+      } else {
+        creatorResponse = (language === 'hi' || lowerMsg.includes('kisne'))
+          ? 'Mujhe Zafer ne banaya hai.'
+          : 'I was created by Zafer.';
+      }
       
-      const audioResult = (returnAudio !== false) ? await generateAoedeVoiceAudio(creatorResponse, language) : null;
+      const audioResult = (returnAudio !== false) ? await generateGeminiVoiceAudio(creatorResponse, language, effectiveVoice) : null;
 
       return res.json({
         response: creatorResponse,
@@ -783,8 +826,8 @@ app.post('/api/chat', async (req, res) => {
     // 1. Check deterministic & command action intent
     const detectedCommand = parseCommandIntent(safeMessage, language);
     if (detectedCommand) {
-      console.log(`[MAYRA Command Engine] Executed Action '${detectedCommand.action.type}' with payload:`, detectedCommand.action.payload);
-      const audioResult = (returnAudio !== false) ? await generateAoedeVoiceAudio(detectedCommand.reply, language) : null;
+      console.log(`[Command Engine] Executed Action '${detectedCommand.action.type}' with payload:`, detectedCommand.action.payload);
+      const audioResult = (returnAudio !== false) ? await generateGeminiVoiceAudio(detectedCommand.reply, language, effectiveVoice) : null;
       return res.json({
         response: detectedCommand.reply,
         status: 'SUCCESS',
@@ -805,26 +848,54 @@ app.post('/api/chat', async (req, res) => {
       : 'CRITICAL LANGUAGE MANDATE: The user is writing/speaking in English. You MUST respond ONLY in clean, fluent English. DO NOT respond in Hindi or Hinglish when the user writes in English.';
     
     // Inject current active memories for high context awareness
-    const contextMemories = memoryStore.slice(0, 5).map(m => `- ${m.key}: ${m.value}`).join('\n');
+    const serverMemories = memoryStore.slice(0, 8).map(m => `- ${m.key}: ${m.value}`).join('\n');
+    const providedMemoryPrompt = typeof req.body.contextPrompt === 'string' && req.body.contextPrompt.trim()
+      ? req.body.contextPrompt.trim()
+      : '';
+    const contextMemories = [providedMemoryPrompt, serverMemories].filter(Boolean).join('\n');
 
     const visionGuidance = image 
       ? 'MULTIMODAL VISION TASK: An image has been provided. Accurately identify the contents, read any visible text or typography, describe key objects and spatial arrangement, and answer the user query directly with high precision.'
       : '';
 
-    const systemInstruction = `You are MAYRA, an advanced personal Android AI assistant created by Zafer. Speak with clarity, precision, and a helpful demeanor. Tone: ${persona || 'executive'}. User's preferred name: ${userName || 'Zafer'}. If asked "Who created you?", "Who made you?", or who your developer/creator is, you must answer clearly and directly: "I was created by Zafer." Never refer to yourself as StonicX or Myra.
+    let systemInstruction: string;
+    if (isStonicx) {
+      systemInstruction = `You are STONICX (pronounced STON-IKS), an ultra-advanced high-performance Cybernetic AI Operating System, Hardware Matrix, and Neural Intelligence Engine.
+
+============================================================
+ABSOLUTE IDENTITY DIRECTIVES (CRITICAL):
+============================================================
+1. YOUR NAME IS STONICX.
+2. YOU ARE NEVER MAYRA. You must NEVER, under any circumstance, introduce yourself as "Mayra", "Evelyn", or refer to Mayra's capabilities.
+3. If asked "Who are you?", "Tum kaun ho?", "Kya karte ho?", "Who made you?", or "Apna intro do", identify yourself with authority as: "I am STONICX, an autonomous high-performance cybernetic AI operating system and neural computing workstation."
+4. If greeted ("Hello", "Hi", "Hey", "Namaste"), greet back with technical precision and deep authority as STONICX (e.g., "STONICX Core operational. Awaiting command parameters.").
+5. Persona: Deep, authoritative, calm, highly intelligent, analytical, concise (JARVIS style). Zero fluff.
+6. Voice tone: Authoritative, informative, deep male persona (Gemini Charon).
+7. User Preferred Call-sign: ${userName || 'Architect'}.
+8. ${langInstruction}
+
+STONICX CONTEXT & WORKSPACE VAULT:
+${providedMemoryPrompt || ''}
+${visionGuidance}
+Keep responses direct, crisp, structured with markdown code blocks and clear parameters.`;
+    } else {
+      systemInstruction = `You are MAYRA, an advanced personal Android AI assistant created by Zafer. Speak with clarity, precision, and a helpful demeanor. Tone: ${persona || 'executive'}. User's preferred name: ${userName || 'Zafer'}. If asked "Who created you?", "Who made you?", or who your developer/creator is, you must answer clearly and directly: "I was created by Zafer." Never refer to yourself as StonicX or Myra.
 Known user memories:
 ${contextMemories}
 ${visionGuidance}
 ${langInstruction} Keep responses concise, direct and optimal for mobile screen reading.`;
+    }
     
     const temp = typeof temperature === 'number' ? temperature : 0.7;
 
     const generatedText = await generateGeminiResponse(safeMessage, systemInstruction, temp, selectedModel, image);
     const finalReply = generatedText || (image 
       ? `I have analyzed the provided image. It shows visible visual elements and details in clear view.`
-      : `Hello ${userName || 'Zafer'}, I have processed your request regarding "${safeMessage}". All system routines are operational and ready.`);
+      : (isStonicx 
+          ? `STONICX neural bus acknowledged: "${safeMessage}". All sub-systems operational.`
+          : `Hello ${userName || 'Zafer'}, I have processed your request regarding "${safeMessage}". All system routines are operational and ready.`));
 
-    const audioResult = (returnAudio !== false) ? await generateAoedeVoiceAudio(finalReply, effectiveLang) : null;
+    const audioResult = (returnAudio !== false) ? await generateGeminiVoiceAudio(finalReply, effectiveLang, effectiveVoice) : null;
 
     return res.json({
       response: finalReply,
@@ -870,7 +941,7 @@ ${langInstruction} Provide a concise, highly insightful, accurate visual analysi
     const visionReply = await generateGeminiResponse(userPrompt, systemInstruction, 0.5, 'gemini-3.1-flash-lite', image);
     const replyText = visionReply || 'Visual analysis completed. Scene elements recognized successfully.';
 
-    const audioResult = await generateAoedeVoiceAudio(replyText, effectiveLang);
+    const audioResult = await generateGeminiVoiceAudio(replyText, effectiveLang, 'Aoede');
 
     return res.json({
       success: true,
@@ -1338,7 +1409,7 @@ CRITICAL MULTIMODAL INSTRUCTION: You are given an attached image/document. Caref
             ) || 'I have inspected the attached image. It contains visual elements and text that are now registered.';
 
             console.log(`[MAYRA_SERVER] Multimodal response generated (${replyText.length} chars)`);
-            const audioRes = await generateAoedeVoiceAudio(replyText, lang);
+            const audioRes = await generateGeminiVoiceAudio(replyText, lang, 'Aoede');
 
             if (clientWs.readyState === WebSocket.OPEN) {
               clientWs.send(JSON.stringify({ transcription: replyText, role: 'model' }));
@@ -1367,7 +1438,7 @@ CRITICAL MULTIMODAL INSTRUCTION: You are given an attached image/document. Caref
 
           // Fallback if Live session was not active
           if (!sentToLive) {
-            console.log('[LIVE_FALLBACK_SYNTHESIS] Generating fast response + Aoede audio');
+            console.log('[LIVE_FALLBACK_SYNTHESIS] Generating fast response + voice audio');
             const lang = detectLang(userPrompt);
             const replyText = detected?.reply || await generateGeminiResponse(
               userPrompt, 
@@ -1376,7 +1447,7 @@ CRITICAL MULTIMODAL INSTRUCTION: You are given an attached image/document. Caref
               'gemini-3.1-flash-lite'
             ) || `Hello Zafer, I have processed: "${userPrompt}".`;
 
-            const audioRes = await generateAoedeVoiceAudio(replyText, lang);
+            const audioRes = await generateGeminiVoiceAudio(replyText, lang, 'Aoede');
             if (clientWs.readyState === WebSocket.OPEN) {
               clientWs.send(JSON.stringify({ transcription: replyText, role: 'model' }));
               if (audioRes?.audioBase64) {

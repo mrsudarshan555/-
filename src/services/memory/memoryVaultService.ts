@@ -48,17 +48,19 @@ export class MemoryVaultService {
    * Loads persisted memories from local storage, falling back to default seed memories,
    * while creating an automatic backup snapshot.
    */
-  public static loadPersistedMemories(defaultMemories: MemoryItem[]): MemoryItem[] {
+  public static loadPersistedMemories(defaultMemories: MemoryItem[] = []): MemoryItem[] {
     if (typeof window === 'undefined') {
       return this.migrateAndBackup(defaultMemories);
     }
     try {
       const savedJson = window.localStorage.getItem(STORAGE_KEY);
-      if (savedJson) {
+      if (savedJson !== null) {
         const parsed = JSON.parse(savedJson);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           // Backup existing valid state
-          window.localStorage.setItem(BACKUP_STORAGE_KEY, savedJson);
+          if (parsed.length > 0) {
+            window.localStorage.setItem(BACKUP_STORAGE_KEY, savedJson);
+          }
           return this.migrateAndBackup(parsed);
         }
       }
@@ -67,7 +69,9 @@ export class MemoryVaultService {
     }
 
     const migrated = this.migrateAndBackup(defaultMemories);
-    this.savePersistedMemories(migrated);
+    if (migrated.length > 0) {
+      this.savePersistedMemories(migrated);
+    }
     return migrated;
   }
 
@@ -354,28 +358,47 @@ export class MemoryVaultService {
    * Helper to parse a freeform fact statement into a clean key and value
    */
   private static parseFactStatement(statement: string): { key: string; value: string; category: MemoryCategory } {
-    const isProject = /project|repo|codebase|app|build|architecture|api/i.test(statement);
-    const isTask = /task|todo|schedule|deadline|meeting/i.test(statement);
-    const isPref = /prefer|like|always|theme|color|voice/i.test(statement);
+    let clean = statement.trim();
+    clean = clean.replace(/^(?:that\s+|ki\s+|कि\s+)/i, '').trim();
+
+    const isProject = /project|repo|codebase|app|build|architecture|api/i.test(clean);
+    const isTask = /task|todo|schedule|deadline|meeting|remind/i.test(clean);
+    const isPref = /prefer|like|always|theme|color|voice|pasand|favorite|favourite|khana|drink/i.test(clean);
 
     let category: MemoryCategory = 'personal';
     if (isProject) category = 'project';
     else if (isTask) category = 'task';
     else if (isPref) category = 'preference';
 
-    // Check for "X is Y" or "X: Y" structure
-    const isMatch = statement.match(/^(.+?)\s+(?:is|are|=|:)\s+(.+)$/i);
+    // 1. Hindi "mera/meri/mere [Subject] [Value] hai" (e.g., "mera roll number 45 hai", "meri favorite movie Inception hai")
+    const hindiMeraMatch = clean.match(/^(?:mera|meri|mere)\s+([a-zA-Z0-9\s]+?)\s+([a-zA-Z0-9\s\+\-\_]+?)(?:\s+(?:hai|hain|tha|thi|hoga))?$/i);
+    if (hindiMeraMatch && hindiMeraMatch[1] && hindiMeraMatch[2]) {
+      const k = hindiMeraMatch[1].trim();
+      let v = hindiMeraMatch[2].trim().replace(/\s+(?:hai|hain|tha|thi|hoga)$/i, '').trim();
+      if (k && v) {
+        return {
+          key: `User ${k.charAt(0).toUpperCase() + k.slice(1)}`,
+          value: v,
+          category
+        };
+      }
+    }
+
+    // 2. "X is Y" or "X: Y" or "X = Y" or "X are Y" or "X hai Y"
+    const isMatch = clean.match(/^(.+?)\s*(?::|=|\s+is\s+|\s+are\s+|\s+hai\s+|\s+hain\s+)\s*(.+)$/i);
     if (isMatch && isMatch[1] && isMatch[2]) {
+      const k = isMatch[1].trim();
+      const v = isMatch[2].trim().replace(/\s+(?:hai|hain|tha|thi|hoga)$/i, '').trim();
       return {
-        key: isMatch[1].trim(),
-        value: isMatch[2].trim(),
+        key: k.charAt(0).toUpperCase() + k.slice(1),
+        value: v,
         category
       };
     }
 
     return {
-      key: statement.length > 30 ? `${statement.slice(0, 27)}...` : statement,
-      value: statement,
+      key: clean.length > 30 ? `${clean.slice(0, 27)}...` : clean,
+      value: clean,
       category
     };
   }
@@ -385,20 +408,47 @@ export class MemoryVaultService {
    * Selects the most relevant memories for the current prompt and formats them
    * into a lightweight context block to prepend to the assistant system instructions.
    */
-  public static buildPromptContext(memories: MemoryItem[], userQuery: string, maxTokens: number = 5): string {
+  public static buildPromptContext(memories: MemoryItem[], userQuery: string, maxTokens: number = 8): string {
     if (!memories || memories.length === 0) return '';
 
-    // Search top relevant memories
-    const matches = this.search(memories, {
-      query: userQuery,
-      limit: maxTokens,
-      minImportance: 2
-    });
+    const cleanQuery = (userQuery || '').toLowerCase();
+    const isGenericMemoryQuery = 
+      cleanQuery.includes('yaad') || 
+      cleanQuery.includes('memory') || 
+      cleanQuery.includes('memories') || 
+      cleanQuery.includes('batao') || 
+      cleanQuery.includes('remember') || 
+      cleanQuery.includes('know about me') || 
+      cleanQuery.includes('what do you know') || 
+      cleanQuery.includes('who am i') || 
+      cleanQuery.includes('mera') || 
+      cleanQuery.includes('meri') || 
+      cleanQuery.includes('mere');
 
-    if (matches.length === 0) return '';
+    let selectedItems: MemoryItem[] = [];
 
-    const lines = matches.map(m => `- [${m.item.category.toUpperCase()}] ${m.item.key}: ${m.item.value}`);
+    if (isGenericMemoryQuery || !userQuery.trim()) {
+      // Provide top pinned and recent memories
+      selectedItems = memories
+        .filter(m => !m.isArchived)
+        .slice(0, Math.max(maxTokens, 10));
+    } else {
+      // Search top relevant memories
+      const matches = this.search(memories, {
+        query: userQuery,
+        limit: maxTokens,
+        minImportance: 1
+      });
+      selectedItems = matches.map(m => m.item);
+      if (selectedItems.length === 0) {
+        selectedItems = memories.filter(m => !m.isArchived).slice(0, 6);
+      }
+    }
 
-    return `\n<memory_vault>\nRelevant Long-Term Memory:\n${lines.join('\n')}\n</memory_vault>\n`;
+    if (selectedItems.length === 0) return '';
+
+    const lines = selectedItems.map(item => `- [${item.category.toUpperCase()}] ${item.key}: ${item.value}`);
+
+    return `\n<memory_vault>\nUser's Saved Memories & Personal Facts:\n${lines.join('\n')}\n</memory_vault>\n`;
   }
 }

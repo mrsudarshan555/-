@@ -12,6 +12,15 @@ import {
 import { APP_THEMES } from '../utils/themePresets';
 import { MemoryVaultService } from '../services/memory/memoryVaultService';
 
+// Storage Keys
+const PERSONAL_CONFIG_STORAGE_KEY = 'mayra_personal_config';
+const ASSISTANT_CONFIG_STORAGE_KEY = 'mayra_assistant_config';
+const VOICE_GUARDIAN_CONFIG_STORAGE_KEY = 'mayra_voice_guardian_config';
+const ADVANCED_CONFIG_STORAGE_KEY = 'mayra_advanced_config';
+const SKILLS_CONFIG_STORAGE_KEY = 'mayra_skills_config';
+const SUB_AGENTS_CONFIG_STORAGE_KEY = 'mayra_subagents_config';
+const INTEGRATIONS_CONFIG_STORAGE_KEY = 'mayra_integrations_config';
+
 const CHARACTER_SIZE_STORAGE_KEY = 'mayra_character_size';
 const CHARACTER_ZOOM_STORAGE_KEY = 'mayra_character_zoom';
 const CHARACTER_SKIN_TONE_STORAGE_KEY = 'mayra_character_skin_tone';
@@ -30,6 +39,30 @@ const LAUNCHER_ICON_STORAGE_KEY = 'mayra_launcher_icon';
 const APP_THEME_STORAGE_KEY = 'mayra_app_theme';
 const HEADING_FONT_STORAGE_KEY = 'mayra_heading_font';
 const CAMERA_ASPECT_RATIO_STORAGE_KEY = 'mayra_camera_aspect_ratio';
+
+const DEFAULT_PERSONAL_CONFIG: UserPersonalConfig = {
+  fullName: '',
+  preferredName: '',
+  email: '',
+  countryDialCode: '+91',
+  countryName: 'India',
+  greetingStyle: 'warm',
+  geminiApiKey: '',
+  geminiModel: 'gemini-3.1-flash-lite',
+  temperature: 0.7
+};
+
+function getInitialPersonalConfig(): UserPersonalConfig {
+  if (typeof window === 'undefined') return DEFAULT_PERSONAL_CONFIG;
+  try {
+    const saved = localStorage.getItem(PERSONAL_CONFIG_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...DEFAULT_PERSONAL_CONFIG, ...parsed };
+    }
+  } catch (e) {}
+  return DEFAULT_PERSONAL_CONFIG;
+}
 
 function getInitialDarkMode(): boolean {
   if (typeof window === 'undefined') return true;
@@ -230,39 +263,147 @@ function getInitialCharacterSkinTone(): number {
   return 50; // Default Medium (Natural Fair/Medium)
 }
 
-export function useMayraSettings() {
-  const [personalConfig, setPersonalConfig] = useState<UserPersonalConfig>({
-    fullName: '',
-    preferredName: '',
-    email: '',
-    countryDialCode: '+91',
-    countryName: 'India',
-    greetingStyle: 'warm',
-    geminiApiKey: '',
-    geminiModel: 'gemini-3.1-flash-lite',
-    temperature: 0.7
-  });
+const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
+  activeMode: 'mayra',
+  personaTone: 'executive',
+  voiceProfile: 'Mayra Violet (Neural)',
+  language: 'en-IN',
+  speechRate: 1.0,
+  speechPitch: 1.0,
+  responseStyle: 'instant',
+  hapticFeedback: true,
+  audioChimes: true,
+  autoReadback: false,
+  contextWindowSize: 20,
+  voiceAlertCalls: true,
+  voiceAlertMessages: true,
+  voiceAlertAutoPrompt: true,
+  proactiveIdleCheckin: true,
+  characterSize: 'medium',
+  characterScaleMultiplier: 1.0,
+  characterZoom: 100,
+  characterSkinTone: 50
+};
 
-  const [assistantConfig, setAssistantConfigState] = useState<AssistantConfig>(() => ({
-    personaTone: 'executive',
-    voiceProfile: 'Mayra Violet (Neural)',
-    language: 'en-IN',
-    speechRate: 1.0,
-    speechPitch: 1.0,
-    responseStyle: 'instant',
-    hapticFeedback: true,
-    audioChimes: true,
-    autoReadback: false,
-    contextWindowSize: 20,
-    voiceAlertCalls: true,
-    voiceAlertMessages: true,
-    voiceAlertAutoPrompt: true,
-    proactiveIdleCheckin: true,
-    characterSize: getInitialCharacterSize(),
-    characterScaleMultiplier: getInitialCharacterSize() === 'small' ? 0.85 : getInitialCharacterSize() === 'large' ? 1.18 : 1.0,
+function getInitialAssistantConfig(): AssistantConfig {
+  const initialCharSize = getInitialCharacterSize();
+  const base: AssistantConfig = {
+    ...DEFAULT_ASSISTANT_CONFIG,
+    characterSize: initialCharSize,
+    characterScaleMultiplier: initialCharSize === 'small' ? 0.85 : initialCharSize === 'large' ? 1.18 : 1.0,
     characterZoom: getInitialCharacterZoom(),
     characterSkinTone: getInitialCharacterSkinTone()
-  }));
+  };
+
+  if (typeof window === 'undefined') return base;
+  try {
+    const saved = localStorage.getItem(ASSISTANT_CONFIG_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...base, ...parsed };
+    }
+  } catch (e) {}
+  return base;
+}
+
+const DEFAULT_VOICE_GUARDIAN_CONFIG: VoiceGuardianConfig = {
+  enabled: true,
+  awayGuardMode: false,
+  listenMode: 'owner_only',
+  strictness: 85,
+  enrolledVoices: INITIAL_ENROLLED_VOICES,
+  ambientCalibration: true
+};
+
+function getInitialVoiceGuardianConfig(): VoiceGuardianConfig {
+  if (typeof window === 'undefined') return DEFAULT_VOICE_GUARDIAN_CONFIG;
+  try {
+    const saved = localStorage.getItem(VOICE_GUARDIAN_CONFIG_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...DEFAULT_VOICE_GUARDIAN_CONFIG, ...parsed };
+    }
+  } catch (e) {}
+  return DEFAULT_VOICE_GUARDIAN_CONFIG;
+}
+
+const DEFAULT_ADVANCED_CONFIG: AdvancedConfig = {
+  safetyLevel: 'standard',
+  permissionMicrophone: true,
+  permissionCamera: true,
+  permissionNotifications: true,
+  permissionOverlay: true,
+  permissionAccessibility: false,
+  backgroundServiceEnabled: true,
+  batteryOptimizationExempt: true,
+  developerDebugMode: false,
+  verboseLogging: false,
+  backgroundHandGestureEnabled: false,
+  backgroundCameraAutoStoppedOnLock: false
+};
+
+function getInitialAdvancedConfig(): AdvancedConfig {
+  if (typeof window === 'undefined') return DEFAULT_ADVANCED_CONFIG;
+  try {
+    const saved = localStorage.getItem(ADVANCED_CONFIG_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...DEFAULT_ADVANCED_CONFIG, ...parsed };
+    }
+  } catch (e) {}
+  return DEFAULT_ADVANCED_CONFIG;
+}
+
+function getInitialSkills(): SkillItem[] {
+  if (typeof window === 'undefined') return INITIAL_SKILLS;
+  try {
+    const saved = localStorage.getItem(SKILLS_CONFIG_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return INITIAL_SKILLS;
+}
+
+function getInitialSubAgents(): SubAgentItem[] {
+  if (typeof window === 'undefined') return INITIAL_SUB_AGENTS;
+  try {
+    const saved = localStorage.getItem(SUB_AGENTS_CONFIG_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return INITIAL_SUB_AGENTS;
+}
+
+function getInitialIntegrations(): IntegrationItem[] {
+  if (typeof window === 'undefined') return INITIAL_INTEGRATIONS;
+  try {
+    const saved = localStorage.getItem(INTEGRATIONS_CONFIG_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return INITIAL_INTEGRATIONS;
+}
+
+export function useMayraSettings() {
+  const [personalConfig, setPersonalConfigState] = useState<UserPersonalConfig>(getInitialPersonalConfig);
+
+  const setPersonalConfig = useCallback((update: React.SetStateAction<UserPersonalConfig> | Partial<UserPersonalConfig>) => {
+    setPersonalConfigState((prev) => {
+      const next = typeof update === 'function' ? update(prev) : { ...prev, ...update };
+      try {
+        localStorage.setItem(PERSONAL_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  }, []);
+
+  const [assistantConfig, setAssistantConfigState] = useState<AssistantConfig>(getInitialAssistantConfig);
 
   // Appearance State (Dark Mode, Orb Style, Orb Color, Orb Size, Use Orb On Home, Orb Type, Custom Hue, Voice Visualizer, Aura Border, Launcher Icon)
   const [appearanceConfig, setAppearanceConfigState] = useState<AppearanceConfig>(() => ({
@@ -376,41 +517,85 @@ export function useMayraSettings() {
           localStorage.setItem(CHARACTER_SKIN_TONE_STORAGE_KEY, String(next.characterSkinTone));
         } catch (e) {}
       }
+      try {
+        localStorage.setItem(ASSISTANT_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {}
       return next;
     });
   }, []);
 
-  const [voiceGuardianConfig, setVoiceGuardianConfig] = useState<VoiceGuardianConfig>({
-    enabled: true,
-    awayGuardMode: false,
-    listenMode: 'owner_only',
-    strictness: 85,
-    enrolledVoices: INITIAL_ENROLLED_VOICES,
-    ambientCalibration: true
-  });
+  const [voiceGuardianConfig, setVoiceGuardianConfigState] = useState<VoiceGuardianConfig>(getInitialVoiceGuardianConfig);
 
-  const [advancedConfig, setAdvancedConfig] = useState<AdvancedConfig>({
-    safetyLevel: 'standard',
-    permissionMicrophone: true,
-    permissionCamera: true,
-    permissionNotifications: true,
-    permissionOverlay: true,
-    permissionAccessibility: false,
-    backgroundServiceEnabled: true,
-    batteryOptimizationExempt: true,
-    developerDebugMode: false,
-    verboseLogging: false,
-    backgroundHandGestureEnabled: false,
-    backgroundCameraAutoStoppedOnLock: false
-  });
+  const setVoiceGuardianConfig = useCallback((update: React.SetStateAction<VoiceGuardianConfig> | Partial<VoiceGuardianConfig>) => {
+    setVoiceGuardianConfigState((prev) => {
+      const next = typeof update === 'function' ? update(prev) : { ...prev, ...update };
+      try {
+        localStorage.setItem(VOICE_GUARDIAN_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  }, []);
 
-  const [skills, setSkills] = useState<SkillItem[]>(INITIAL_SKILLS);
-  const [subAgents, setSubAgents] = useState<SubAgentItem[]>(INITIAL_SUB_AGENTS);
-  const [integrations, setIntegrations] = useState<IntegrationItem[]>(INITIAL_INTEGRATIONS);
-  const [memories, setMemories] = useState<MemoryItem[]>(() => MemoryVaultService.loadPersistedMemories(INITIAL_MEMORIES));
+  const [advancedConfig, setAdvancedConfigState] = useState<AdvancedConfig>(getInitialAdvancedConfig);
+
+  const setAdvancedConfig = useCallback((update: React.SetStateAction<AdvancedConfig> | Partial<AdvancedConfig>) => {
+    setAdvancedConfigState((prev) => {
+      const next = typeof update === 'function' ? update(prev) : { ...prev, ...update };
+      try {
+        localStorage.setItem(ADVANCED_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  }, []);
+
+  const [skills, setSkillsState] = useState<SkillItem[]>(getInitialSkills);
+
+  const setSkills = useCallback((update: React.SetStateAction<SkillItem[]>) => {
+    setSkillsState((prev) => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      try {
+        localStorage.setItem(SKILLS_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  }, []);
+
+  const [subAgents, setSubAgentsState] = useState<SubAgentItem[]>(getInitialSubAgents);
+
+  const setSubAgents = useCallback((update: React.SetStateAction<SubAgentItem[]>) => {
+    setSubAgentsState((prev) => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      try {
+        localStorage.setItem(SUB_AGENTS_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  }, []);
+
+  const [integrations, setIntegrationsState] = useState<IntegrationItem[]>(getInitialIntegrations);
+
+  const setIntegrations = useCallback((update: React.SetStateAction<IntegrationItem[]>) => {
+    setIntegrationsState((prev) => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      try {
+        localStorage.setItem(INTEGRATIONS_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  }, []);
+
+  const [memories, setMemoriesState] = useState<MemoryItem[]>(() => MemoryVaultService.loadPersistedMemories(INITIAL_MEMORIES));
+
+  const setMemories = useCallback((update: React.SetStateAction<MemoryItem[]>) => {
+    setMemoriesState((prev) => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      MemoryVaultService.savePersistedMemories(next);
+      return next;
+    });
+  }, []);
 
   const addMemory = useCallback((newMemory: Omit<MemoryItem, 'id' | 'timestamp'>) => {
-    setMemories((prev) => {
+    setMemoriesState((prev) => {
       const conflict = MemoryVaultService.findConflictOrDuplicate(prev, newMemory.key, newMemory.value);
       if (conflict.status === 'EXACT_DUPLICATE') {
         console.log('[MemoryVault] Exact duplicate avoided for:', newMemory.key);
@@ -452,7 +637,7 @@ export function useMayraSettings() {
   }, []);
 
   const deleteMemory = useCallback((id: string) => {
-    setMemories((prev) => {
+    setMemoriesState((prev) => {
       const updated = prev.filter((m) => m.id !== id);
       MemoryVaultService.savePersistedMemories(updated);
       return updated;
@@ -460,7 +645,7 @@ export function useMayraSettings() {
   }, []);
 
   const togglePinMemory = useCallback((id: string) => {
-    setMemories((prev) => {
+    setMemoriesState((prev) => {
       const updated = prev.map((m) => (m.id === id ? { ...m, isPinned: !m.isPinned } : m));
       MemoryVaultService.savePersistedMemories(updated);
       return updated;
@@ -468,15 +653,23 @@ export function useMayraSettings() {
   }, []);
 
   const toggleSkill = useCallback((id: string) => {
-    setSkills((prev) =>
-      prev.map((skill) => (skill.id === id ? { ...skill, enabled: !skill.enabled } : skill))
-    );
+    setSkillsState((prev) => {
+      const updated = prev.map((skill) => (skill.id === id ? { ...skill, enabled: !skill.enabled } : skill));
+      try {
+        localStorage.setItem(SKILLS_CONFIG_STORAGE_KEY, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
   }, []);
 
   const toggleSubAgent = useCallback((id: string) => {
-    setSubAgents((prev) =>
-      prev.map((agent) => (agent.id === id ? { ...agent, enabled: !agent.enabled } : agent))
-    );
+    setSubAgentsState((prev) => {
+      const updated = prev.map((agent) => (agent.id === id ? { ...agent, enabled: !agent.enabled } : agent));
+      try {
+        localStorage.setItem(SUB_AGENTS_CONFIG_STORAGE_KEY, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
   }, []);
 
   const exportBackupJson = useCallback(() => {
@@ -502,9 +695,14 @@ export function useMayraSettings() {
   }, [personalConfig, assistantConfig, appearanceConfig, voiceGuardianConfig, advancedConfig, memories, skills, subAgents]);
 
   const resetAllData = useCallback(() => {
-    setMemories([]);
-    setSkills(INITIAL_SKILLS);
-    setSubAgents(INITIAL_SUB_AGENTS);
+    setMemoriesState([]);
+    MemoryVaultService.savePersistedMemories([]);
+    setSkillsState(INITIAL_SKILLS);
+    try {
+      localStorage.setItem(SKILLS_CONFIG_STORAGE_KEY, JSON.stringify(INITIAL_SKILLS));
+      localStorage.setItem(SUB_AGENTS_CONFIG_STORAGE_KEY, JSON.stringify(INITIAL_SUB_AGENTS));
+    } catch (e) {}
+    setSubAgentsState(INITIAL_SUB_AGENTS);
   }, []);
 
   return {

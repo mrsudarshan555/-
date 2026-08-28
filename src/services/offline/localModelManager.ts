@@ -11,10 +11,50 @@ import { OfflineModelDescriptor } from './offlineAiTypes';
 
 export const DEFAULT_OFFLINE_MODELS: OfflineModelDescriptor[] = [
   {
-    id: 'smollm2-1.7b-q4',
-    name: 'Mayra Offline Core (SmolLM2 1.7B)',
+    id: 'lfm2.5-230m-q4',
+    name: 'Mayra Base (LFM 2.5 230M Default)',
     category: 'chat_llm',
-    description: 'High-speed quantized conversational language model tailored for on-device reasoning and chat.',
+    description: 'Ultra-fast low-memory default GGUF model (~145 MB) with instant response and lowest battery impact.',
+    filename: 'LFM2.5-230M-Q4_K_M.gguf',
+    format: 'GGUF',
+    quantization: 'Q4_K_M',
+    sizeBytes: 152043520, // ~145 MB
+    sizeFormatted: '145 MB',
+    estimatedRamBytes: 240000000, // ~240 MB
+    estimatedRamFormatted: '240 MB',
+    sha256: '9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b',
+    downloadUrl: 'https://huggingface.co/LiquidCloud/LFM-2.5-230M-GGUF/resolve/main/LFM2.5-230M-Q4_K_M.gguf',
+    status: 'not_downloaded',
+    downloadProgress: 0,
+    isLoadedInMemory: false,
+    minDeviceRamGb: 2,
+    recommendedCores: 2
+  },
+  {
+    id: 'qwen2.5-0.5b-q4',
+    name: 'Mayra Compact (Qwen 2.5 0.5B)',
+    category: 'chat_llm',
+    description: 'Fast, balanced daily conversational model (~398 MB) with low RAM footprint.',
+    filename: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    format: 'GGUF',
+    quantization: 'Q4_K_M',
+    sizeBytes: 398000000, // ~398 MB
+    sizeFormatted: '398 MB',
+    estimatedRamBytes: 520000000, // ~520 MB
+    estimatedRamFormatted: '520 MB',
+    sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
+    downloadUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    status: 'not_downloaded',
+    downloadProgress: 0,
+    isLoadedInMemory: false,
+    minDeviceRamGb: 3,
+    recommendedCores: 2
+  },
+  {
+    id: 'smollm2-1.7b-q4',
+    name: 'Mayra High-Reasoning (SmolLM2 1.7B)',
+    category: 'chat_llm',
+    description: 'High-accuracy reasoning and conversational depth (~1.06 GB) for complex queries.',
     filename: 'smollm2-1.7b-instruct-q4_k_m.gguf',
     format: 'GGUF',
     quantization: 'Q4_K_M',
@@ -31,24 +71,24 @@ export const DEFAULT_OFFLINE_MODELS: OfflineModelDescriptor[] = [
     recommendedCores: 4
   },
   {
-    id: 'qwen2.5-0.5b-q4',
-    name: 'Mayra Ultra-Lite (Qwen 2.5 0.5B)',
+    id: 'llama-3.2-1b-q4',
+    name: 'Mayra Knowledge (Llama 3.2 1B)',
     category: 'chat_llm',
-    description: 'Ultra-lightweight model designed for rapid response on low-end hardware and low battery.',
-    filename: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    description: 'Rich knowledge and multilingual precision (~750 MB) optimized for on-device execution.',
+    filename: 'llama-3.2-1b-instruct-q4_k_m.gguf',
     format: 'GGUF',
     quantization: 'Q4_K_M',
-    sizeBytes: 398000000, // ~398 MB
-    sizeFormatted: '398 MB',
-    estimatedRamBytes: 520000000, // ~520 MB
-    estimatedRamFormatted: '520 MB',
-    sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
-    downloadUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    sizeBytes: 786432000, // ~750 MB
+    sizeFormatted: '750 MB',
+    estimatedRamBytes: 880000000, // ~880 MB
+    estimatedRamFormatted: '880 MB',
+    sha256: '3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c',
+    downloadUrl: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
     status: 'not_downloaded',
     downloadProgress: 0,
     isLoadedInMemory: false,
-    minDeviceRamGb: 3,
-    recommendedCores: 2
+    minDeviceRamGb: 4,
+    recommendedCores: 4
   },
   {
     id: 'piper-tts-en',

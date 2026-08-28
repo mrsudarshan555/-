@@ -22,6 +22,22 @@ interface MemoriesScreenProps {
   triggerAddSignal?: number;
 }
 
+const FAMILY_CONTACTS_STORAGE_KEY = 'mayra_family_contacts';
+
+function getInitialFamilyContacts(): FamilyContact[] {
+  if (typeof window === 'undefined') return INITIAL_FAMILY_CONTACTS;
+  try {
+    const saved = localStorage.getItem(FAMILY_CONTACTS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {}
+  return INITIAL_FAMILY_CONTACTS;
+}
+
 export const MemoriesScreen: React.FC<MemoriesScreenProps> = ({
   memories,
   onAddMemory,
@@ -34,12 +50,22 @@ export const MemoriesScreen: React.FC<MemoriesScreenProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [familyContacts, setFamilyContacts] = useState<FamilyContact[]>(INITIAL_FAMILY_CONTACTS);
+  const [familyContacts, setFamilyContactsState] = useState<FamilyContact[]>(getInitialFamilyContacts);
   const [showAddFamilyModal, setShowAddFamilyModal] = useState(false);
   const [newFamilyRelation, setNewFamilyRelation] = useState<FamilyContact['relationship']>('Father');
   const [newFamilyName, setNewFamilyName] = useState('');
   const [newFamilyNumber, setNewFamilyNumber] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const setFamilyContacts = React.useCallback((update: React.SetStateAction<FamilyContact[]>) => {
+    setFamilyContactsState((prev) => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      try {
+        localStorage.setItem(FAMILY_CONTACTS_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  }, []);
 
   // Open action menu on FAB signal
   React.useEffect(() => {
@@ -221,7 +247,7 @@ export const MemoriesScreen: React.FC<MemoriesScreenProps> = ({
                       className="p-2 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 rounded-xl text-emerald-300 transition-colors cursor-pointer"
                       title={`Send WhatsApp message to ${contact.name}`}
                     >
-                      <MessageSquare className="w-3.5 h-3.5" />
+                      <MessageSquare className="w-3.5 h-3.5 stroke-[1.8]" />
                     </motion.button>
                     <motion.button
                       whileHover={{ scale: 1.1 }}
@@ -230,7 +256,7 @@ export const MemoriesScreen: React.FC<MemoriesScreenProps> = ({
                       className="p-2 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 rounded-xl text-cyan-300 transition-colors cursor-pointer"
                       title={`Voice call ${contact.name}`}
                     >
-                      <Phone className="w-3.5 h-3.5" />
+                      <Phone className="w-3.5 h-3.5 stroke-[1.8]" />
                     </motion.button>
                   </div>
                 </motion.div>
@@ -344,7 +370,7 @@ export const MemoriesScreen: React.FC<MemoriesScreenProps> = ({
                           }`}
                           title={mem.isPinned ? 'Unpin fact' : 'Pin fact to priority context'}
                         >
-                          <Pin className="w-3.5 h-3.5" />
+                          <Pin className="w-3.5 h-3.5 stroke-[1.8]" />
                         </motion.button>
                         <motion.button
                           whileHover={{ scale: 1.15 }}
@@ -356,7 +382,7 @@ export const MemoriesScreen: React.FC<MemoriesScreenProps> = ({
                           className="p-1.5 text-slate-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
                           title="Delete memory"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5 stroke-[1.8]" />
                         </motion.button>
                       </div>
                     </div>

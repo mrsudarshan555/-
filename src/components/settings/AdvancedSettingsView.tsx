@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AdvancedConfig } from '../../types';
 import { 
   ShieldAlert, Mic, Camera, Bell, 
   Layers, Accessibility, Cpu, Battery, 
   Terminal, Bug, AlertOctagon, CheckCircle2, Sliders, ArrowLeft,
-  Hand
+  Hand, PlayCircle, HelpCircle, Flame, Activity, Sparkles
 } from 'lucide-react';
+import { GestureUsageService } from '../../services/gestures/gestureUsageService';
+import { GestureTutorialModal } from '../gestures/GestureTutorialModal';
+import { GesturePracticeModal } from '../gestures/GesturePracticeModal';
 
 interface AdvancedSettingsViewProps {
   config: AdvancedConfig;
@@ -18,6 +21,17 @@ export const AdvancedSettingsView: React.FC<AdvancedSettingsViewProps> = ({
   onChange,
   onBack
 }) => {
+  const [isTutorialOpen, setIsTutorialOpen] = useState<boolean>(false);
+  const [isPracticeOpen, setIsPracticeOpen] = useState<boolean>(false);
+  const todayUsageCount = GestureUsageService.getTodayGestureCount();
+
+  const handleToggleBackgroundGesture = (checked: boolean) => {
+    onChange({ backgroundHandGestureEnabled: checked });
+    if (checked && !GestureUsageService.hasCompletedGestureTutorial()) {
+      setIsTutorialOpen(true);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-y-auto bg-[#070913] text-slate-200">
       
@@ -45,6 +59,116 @@ export const AdvancedSettingsView: React.FC<AdvancedSettingsViewProps> = ({
 
       <div className="p-4 space-y-4 text-xs font-sans pb-8">
         
+        {/* Background Floating Hand-Gesture Engine & Chat Head */}
+        <div className={`p-3.5 rounded-2xl border transition-all space-y-3 ${
+          config.backgroundHandGestureEnabled 
+            ? 'bg-[#080E24] border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.15)]' 
+            : 'bg-[#0C1021] border-white/10'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`p-1.5 rounded-lg ${
+                config.backgroundHandGestureEnabled 
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-400/40' 
+                  : 'bg-white/[0.06] text-slate-400'
+              }`}>
+                <Hand className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white">Enable Background Hand Gesture</div>
+                <div className="text-[10px] text-slate-400">Floating Chat-Head bubble & touchless gesture trigger</div>
+              </div>
+            </div>
+            
+            {/* Toggle */}
+            <input
+              type="checkbox"
+              id="toggle-background-hand-gesture"
+              checked={config.backgroundHandGestureEnabled}
+              onChange={(e) => handleToggleBackgroundGesture(e.target.checked)}
+              className="w-4 h-4 accent-cyan-400 rounded cursor-pointer"
+            />
+          </div>
+
+          <p className="text-[10px] text-slate-300 leading-relaxed">
+            Allows controlling MAYRA through a floating overlay bubble on the phone&apos;s home screen even when the app is in the background or closed. Waving or double-tapping near the bubble opens MAYRA or triggers voice commands.
+          </p>
+
+          {/* Today's Usage Counter Info */}
+          <div className="p-2.5 rounded-xl bg-gradient-to-r from-rose-950/30 via-purple-950/20 to-cyan-950/30 border border-rose-500/30 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-1 rounded-lg bg-rose-500/20 text-rose-300">
+                <Activity className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-white block">Today&apos;s Gesture Usage</span>
+                <span className="text-[8px] text-slate-400 font-mono">Live bubble badge counter</span>
+              </div>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/50 text-rose-300 font-mono font-bold text-[11px]">
+              {todayUsageCount} actions
+            </span>
+          </div>
+
+          {/* Interactive Tutorial & Practice Sandbox Buttons */}
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            {/* Replay Tutorial Button */}
+            <button
+              onClick={() => setIsTutorialOpen(true)}
+              className="p-2.5 rounded-xl bg-cyan-950/50 hover:bg-cyan-900/50 text-cyan-200 border border-cyan-500/30 flex items-center gap-2 transition-all text-left shadow-sm active:scale-98"
+            >
+              <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0" />
+              <div>
+                <span className="text-xs font-bold block text-white">Visual Tutorial</span>
+                <span className="text-[9px] text-cyan-300/80 font-mono">Gesture guide</span>
+              </div>
+            </button>
+
+            {/* Practice Mode Sandbox Button */}
+            <button
+              onClick={() => setIsPracticeOpen(true)}
+              className="p-2.5 rounded-xl bg-purple-950/50 hover:bg-purple-900/50 text-purple-200 border border-purple-500/30 flex items-center gap-2 transition-all text-left shadow-sm active:scale-98"
+            >
+              <Flame className="w-4 h-4 text-purple-400 shrink-0" />
+              <div>
+                <span className="text-xs font-bold block text-white">Test / Practice</span>
+                <span className="text-[9px] text-purple-300/80 font-mono">Zero-risk sandbox</span>
+              </div>
+            </button>
+          </div>
+
+          {/* Privacy & Always-Visible Camera Safety Indicators */}
+          <div className="space-y-1.5 pt-1">
+            <div className="p-2 bg-[#070913] rounded-xl border border-white/5 flex items-start gap-2 text-[10px]">
+              <div className="w-2 h-2 rounded-full bg-rose-500 mt-1 shrink-0 animate-ping" />
+              <div>
+                <span className="text-rose-400 font-mono font-bold uppercase">Always-Visible Camera Indicator & PiP:</span>
+                <p className="text-slate-400 text-[9px] mt-0.5">
+                  Whenever the background gesture camera is active, an un-hideable status indicator badge (<b className="text-white">&quot;MAYRA is watching&quot;</b>) and mini PiP camera preview remain active across the whole phone.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-2 bg-[#070913] rounded-xl border border-white/5 flex items-start gap-2 text-[10px]">
+              <ShieldAlert className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+              <div>
+                <span className="text-emerald-400 font-mono font-bold uppercase">Screen-Lock Auto Shut-Off:</span>
+                <p className="text-slate-400 text-[9px] mt-0.5">
+                  When the phone screen is locked or power button is pressed, the background camera immediately turns OFF. Upon unlock, it does NOT auto-restart and requires manual reactivation for privacy protection.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Status Badge */}
+          <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-1 border-t border-white/5">
+            <span>FOREGROUND SERVICE: <b className={config.backgroundHandGestureEnabled ? 'text-cyan-300' : 'text-slate-500'}>
+              {config.backgroundHandGestureEnabled ? 'ACTIVE (OVERLAY ON)' : 'OFF'}
+            </b></span>
+            <span>OVERLAY: <b className="text-cyan-400">TYPE_APPLICATION_OVERLAY</b></span>
+          </div>
+        </div>
+
         {/* Safety & Moderation Level */}
         <div className="p-3.5 bg-[#0C1021] border border-blue-500/20 rounded-2xl space-y-3">
           <div className="text-[11px] font-mono font-bold text-blue-400 uppercase flex items-center gap-1.5">
@@ -244,101 +368,21 @@ export const AdvancedSettingsView: React.FC<AdvancedSettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Background Floating Hand-Gesture Engine & Chat Head */}
-        <div className={`p-3.5 rounded-2xl border transition-all space-y-3 ${
-          config.backgroundHandGestureEnabled 
-            ? 'bg-[#080E24] border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.15)]' 
-            : 'bg-[#0C1021] border-white/10'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={`p-1.5 rounded-lg ${
-                config.backgroundHandGestureEnabled 
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-400/40' 
-                  : 'bg-white/[0.06] text-slate-400'
-              }`}>
-                <Hand className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-white">Enable Background Hand Gesture</div>
-                <div className="text-[10px] text-slate-400">Floating Chat-Head bubble & touchless gesture trigger</div>
-              </div>
-            </div>
-            
-            {/* Toggle (Default OFF) */}
-            <input
-              type="checkbox"
-              id="toggle-background-hand-gesture"
-              checked={config.backgroundHandGestureEnabled}
-              onChange={(e) => onChange({ backgroundHandGestureEnabled: e.target.checked })}
-              className="w-4 h-4 accent-cyan-400 rounded cursor-pointer"
-            />
-          </div>
-
-          <p className="text-[10px] text-slate-300 leading-relaxed">
-            Allows controlling MAYRA through a floating overlay bubble on the phone&apos;s home screen even when the app is in the background or closed. Waving or double-tapping near the bubble opens MAYRA or triggers voice commands.
-          </p>
-
-          {/* Privacy & Always-Visible Camera Safety Indicators */}
-          <div className="space-y-1.5 pt-1">
-            <div className="p-2 bg-[#070913] rounded-xl border border-white/5 flex items-start gap-2 text-[10px]">
-              <div className="w-2 h-2 rounded-full bg-rose-500 mt-1 shrink-0 animate-ping" />
-              <div>
-                <span className="text-rose-400 font-mono font-bold uppercase">Always-Visible Camera Indicator:</span>
-                <p className="text-slate-400 text-[9px] mt-0.5">
-                  Whenever the background gesture camera is active, an un-hideable status indicator badge (<b className="text-white">&quot;MAYRA is watching&quot;</b>) remains pinned on screen.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-2 bg-[#070913] rounded-xl border border-white/5 flex items-start gap-2 text-[10px]">
-              <ShieldAlert className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
-              <div>
-                <span className="text-emerald-400 font-mono font-bold uppercase">Screen-Lock Auto Shut-Off:</span>
-                <p className="text-slate-400 text-[9px] mt-0.5">
-                  When the phone screen is locked or power button is pressed, the background camera immediately turns OFF. Upon unlock, it does NOT auto-restart and requires manual reactivation for privacy protection.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Status Badge */}
-          <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-1 border-t border-white/5">
-            <span>FOREGROUND SERVICE: <b className={config.backgroundHandGestureEnabled ? 'text-cyan-300' : 'text-slate-500'}>
-              {config.backgroundHandGestureEnabled ? 'ACTIVE (OVERLAY ON)' : 'OFF'}
-            </b></span>
-            <span>OVERLAY: <b className="text-cyan-400">TYPE_APPLICATION_OVERLAY</b></span>
-          </div>
-        </div>
-
-        {/* Barehands Hand Tracking Engine Status Card */}
-        <div className="p-3.5 bg-[#0C1021] border border-cyan-500/30 rounded-2xl space-y-2.5">
-          <div className="text-[11px] font-mono font-bold text-cyan-400 uppercase flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Hand className="w-3.5 h-3.5 text-cyan-400" /> Barehands Gesture Engine
-            </div>
-            <span className="px-2 py-0.5 bg-cyan-950 text-[9px] text-cyan-300 font-mono rounded-full border border-cyan-500/30">
-              18 FPS Throttled
-            </span>
-          </div>
-
-          <p className="text-[10px] text-slate-300 leading-relaxed">
-            Clean-room 3D hand tracking module using MediaPipe 21 landmarks. Features hand detection, pinch-drag, two-hand scaling, and model rotation.
-          </p>
-
-          <div className="grid grid-cols-2 gap-2 text-[10px] font-mono pt-1">
-            <div className="p-2 bg-[#070913] rounded-lg border border-white/5 text-slate-300 flex flex-col gap-0.5">
-              <span className="text-slate-500 text-[9px]">POWER SAFETY</span>
-              <span className="text-emerald-400 font-bold">Auto-Pause on Idle</span>
-            </div>
-            <div className="p-2 bg-[#070913] rounded-lg border border-white/5 text-slate-300 flex flex-col gap-0.5">
-              <span className="text-slate-500 text-[9px]">CAMERA ACCESS</span>
-              <span className="text-cyan-300 font-bold">On-Demand Only</span>
-            </div>
-          </div>
-        </div>
-
       </div>
+
+      {/* Tutorial Guide Modal */}
+      <GestureTutorialModal
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
+        onOpenPracticeMode={() => setIsPracticeOpen(true)}
+      />
+
+      {/* Practice Sandbox Modal */}
+      <GesturePracticeModal
+        isOpen={isPracticeOpen}
+        onClose={() => setIsPracticeOpen(false)}
+        onOpenTutorial={() => setIsTutorialOpen(true)}
+      />
     </div>
   );
 };

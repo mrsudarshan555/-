@@ -115,9 +115,9 @@ export const AppIconTile: React.FC<AppIconTileProps> = ({
   const renderIcon = () => {
     if (React.isValidElement(icon)) {
       return React.cloneElement(icon as React.ReactElement<any>, {
-        className: `${sizeConfig.icon} text-white fill-white stroke-[1.25] drop-shadow-sm`,
-        strokeWidth: 1.25,
-        fill: 'currentColor'
+        className: `${sizeConfig.icon} text-white stroke-[1.8] drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]`,
+        strokeWidth: 1.8,
+        fill: 'none'
       });
     }
 
@@ -129,9 +129,8 @@ export const AppIconTile: React.FC<AppIconTileProps> = ({
       const IconComponent = icon as React.ComponentType<any>;
       return (
         <IconComponent
-          className={`${sizeConfig.icon} text-white fill-white stroke-[1.25] drop-shadow-sm`}
-          strokeWidth={1.25}
-          fill="currentColor"
+          className={`${sizeConfig.icon} text-white stroke-[1.8] drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]`}
+          strokeWidth={1.8}
         />
       );
     }

@@ -2,31 +2,48 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { 
   Pen, Eraser, Download, Trash2, Undo2, Redo2, 
   Sparkles, X, Palette, Square, Circle, ArrowUpRight, 
-  Type, Check, Share2
+  Type, Check, Share2, Grid, Sun, Moon
 } from 'lucide-react';
+import { StonicxWhiteboardConfig } from '../../types/stonicxSettings';
 
 interface WhiteboardToolProps {
   onClose: () => void;
   onSendToChat?: (text: string) => void;
+  config?: StonicxWhiteboardConfig;
+  assistantName?: string;
 }
 
 type ToolType = 'pen' | 'highlighter' | 'eraser' | 'rect' | 'circle' | 'arrow' | 'text';
 
 const COLORS = [
-  '#06B6D4', // Cyan
-  '#A855F7', // Purple
-  '#10B981', // Emerald
-  '#F59E0B', // Amber
-  '#EF4444', // Rose
+  '#00F0FF', // Cyan
+  '#00FF9D', // Emerald
+  '#C084FC', // Violet
+  '#FBBF24', // Amber
+  '#FB7185', // Rose
   '#FFFFFF', // White
   '#0F172A'  // Dark slate
 ];
 
-export const WhiteboardTool: React.FC<WhiteboardToolProps> = ({ onClose, onSendToChat }) => {
+const BG_THEMES: Record<string, { bg: string; grid: string; label: string }> = {
+  dark: { bg: '#070914', grid: 'rgba(0, 240, 255, 0.05)', label: 'Obsidian Dark' },
+  blueprint: { bg: '#04152D', grid: 'rgba(56, 189, 248, 0.08)', label: 'CAD Blueprint' },
+  pcb_green: { bg: '#03170D', grid: 'rgba(0, 255, 157, 0.06)', label: 'Matrix PCB' },
+  light: { bg: '#F8FAFC', grid: 'rgba(15, 23, 42, 0.06)', label: 'Crisp Light' }
+};
+
+export const WhiteboardTool: React.FC<WhiteboardToolProps> = ({ 
+  onClose, 
+  onSendToChat, 
+  config,
+  assistantName = 'STONICX'
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [tool, setTool] = useState<ToolType>('pen');
-  const [color, setColor] = useState<string>('#06B6D4');
-  const [lineWidth, setLineWidth] = useState<number>(3);
+  const [tool, setTool] = useState<ToolType>(config?.defaultTool || 'pen');
+  const [color, setColor] = useState<string>(config?.defaultColor || '#00F0FF');
+  const [lineWidth, setLineWidth] = useState<number>(config?.defaultLineWidth || 3);
+  const [bgThemeKey, setBgThemeKey] = useState<string>(config?.backgroundTheme || 'dark');
+  const [showGrid, setShowGrid] = useState<boolean>(config?.gridOverlay ?? true);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [history, setHistory] = useState<ImageData[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
@@ -34,6 +51,33 @@ export const WhiteboardTool: React.FC<WhiteboardToolProps> = ({ onClose, onSendT
   const [aiAnalysisResult, setAiAnalysisResult] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [snapshotBeforeShape, setSnapshotBeforeShape] = useState<ImageData | null>(null);
+
+  const currentBg = BG_THEMES[bgThemeKey] || BG_THEMES.dark;
+
+  const drawCanvasBackground = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    ctx.fillStyle = currentBg.bg;
+    ctx.fillRect(0, 0, width, height);
+
+    if (showGrid) {
+      ctx.save();
+      ctx.strokeStyle = currentBg.grid;
+      ctx.lineWidth = 1;
+      const step = 24;
+      for (let x = 0; x < width; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < height; y += step) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }, [currentBg, showGrid]);
 
   // Initialize Canvas
   useEffect(() => {
@@ -48,15 +92,13 @@ export const WhiteboardTool: React.FC<WhiteboardToolProps> = ({ onClose, onSendT
     canvas.height = rect.height * window.devicePixelRatio;
     ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-    // Initial background
-    ctx.fillStyle = '#070914';
-    ctx.fillRect(0, 0, rect.width, rect.height);
+    drawCanvasBackground(ctx, rect.width, rect.height);
 
     // Save initial state to history
     const initialData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     setHistory([initialData]);
     setHistoryIndex(0);
-  }, []);
+  }, [drawCanvasBackground]);
 
   const saveHistory = useCallback(() => {
     const canvas = canvasRef.current;
@@ -105,8 +147,7 @@ export const WhiteboardTool: React.FC<WhiteboardToolProps> = ({ onClose, onSendT
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    ctx.fillStyle = '#070914';
-    ctx.fillRect(0, 0, rect.width, rect.height);
+    drawCanvasBackground(ctx, rect.width, rect.height);
     saveHistory();
   };
 
@@ -263,18 +304,48 @@ export const WhiteboardTool: React.FC<WhiteboardToolProps> = ({ onClose, onSendT
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
           <span className="font-mono text-xs font-bold text-cyan-300 tracking-wider">
-            MAYRA WHITEBOARD & CANVAS
+            {assistantName} TECH WHITEBOARD
+          </span>
+          <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-slate-400 font-mono">
+            {currentBg.label} • {lineWidth}px
           </span>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {/* Background Theme Switcher */}
+          <div className="flex items-center bg-black/40 border border-white/10 rounded-lg p-0.5">
+            {Object.keys(BG_THEMES).map((key) => (
+              <button
+                key={key}
+                onClick={() => setBgThemeKey(key)}
+                className={`px-2 py-0.5 rounded text-[9px] font-mono transition-all ${
+                  bgThemeKey === key ? 'bg-cyan-500/30 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title={`Switch canvas background to ${BG_THEMES[key].label}`}
+              >
+                {key === 'dark' ? 'Dark' : key === 'blueprint' ? 'CAD' : key === 'pcb_green' ? 'PCB' : 'Light'}
+              </button>
+            ))}
+          </div>
+
+          {/* Grid Toggle */}
+          <button
+            onClick={() => setShowGrid((prev) => !prev)}
+            className={`p-1.5 rounded-lg border text-[10px] font-mono transition-all ${
+              showGrid ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-300' : 'bg-white/5 border-white/10 text-slate-400'
+            }`}
+            title="Toggle CAD Grid Overlay"
+          >
+            <Grid className="w-3.5 h-3.5" />
+          </button>
+
           <button
             onClick={handleAnalyzeCanvas}
             disabled={isAnalyzing}
             className="flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-cyan-600/30 to-purple-600/30 hover:from-cyan-600/50 hover:to-purple-600/50 border border-cyan-400/40 rounded-lg text-[10px] font-mono text-cyan-300 font-bold transition-all shadow-[0_0_12px_rgba(6,182,212,0.2)] disabled:opacity-50"
           >
             <Sparkles className={`w-3 h-3 ${isAnalyzing ? 'animate-spin' : ''}`} />
-            <span>{isAnalyzing ? 'Analyzing...' : 'MAYRA Vision AI'}</span>
+            <span>{isAnalyzing ? 'Analyzing...' : `${assistantName} AI Vision`}</span>
           </button>
 
           <button
@@ -440,6 +511,27 @@ export const WhiteboardTool: React.FC<WhiteboardToolProps> = ({ onClose, onSendT
                 }`}
                 style={{ backgroundColor: c }}
               />
+            ))}
+          </div>
+
+          <div className="h-5 w-[1px] bg-white/10 shrink-0 mx-1" />
+
+          {/* Stroke Width Selector */}
+          <div className="flex items-center gap-1 shrink-0 bg-black/40 border border-white/10 rounded-lg p-0.5">
+            {[2, 4, 8, 14].map((w) => (
+              <button
+                key={w}
+                onClick={() => setLineWidth(w)}
+                className={`w-6 h-6 flex items-center justify-center rounded text-[10px] font-mono transition-all ${
+                  lineWidth === w ? 'bg-cyan-500/30 text-cyan-300 font-bold border border-cyan-400/50' : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title={`Brush Width: ${w}px`}
+              >
+                <div 
+                  className="rounded-full bg-current" 
+                  style={{ width: Math.max(3, w * 0.8), height: Math.max(3, w * 0.8) }} 
+                />
+              </button>
             ))}
           </div>
 

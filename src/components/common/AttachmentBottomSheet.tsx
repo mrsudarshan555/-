@@ -114,9 +114,9 @@ export const AttachmentBottomSheet: React.FC<AttachmentBottomSheetProps> = ({
           <span className="text-xs font-semibold text-white tracking-wide">Attach</span>
           <button
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-white rounded-full transition-colors"
+            className="p-1 text-slate-400 hover:text-white rounded-full transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4 stroke-[1.8]" />
           </button>
         </div>
 
@@ -130,10 +130,10 @@ export const AttachmentBottomSheet: React.FC<AttachmentBottomSheetProps> = ({
                 onOpenVisionScanner();
               }
             }}
-            className="w-full flex items-center gap-3.5 px-3.5 py-3 rounded-2xl hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors text-left group"
+            className="w-full flex items-center gap-3.5 px-3.5 py-3 rounded-2xl hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors text-left group cursor-pointer"
           >
-            <div className="p-2 bg-white/[0.06] group-hover:bg-cyan-500/20 rounded-xl text-slate-300 group-hover:text-cyan-300 transition-colors border border-white/5">
-              <Camera className="w-5 h-5" />
+            <div className="p-2.5 bg-white/[0.06] group-hover:bg-cyan-500/20 rounded-xl text-slate-300 group-hover:text-cyan-300 transition-colors border border-white/10 shrink-0">
+              <Camera className="w-5 h-5 stroke-[1.8]" />
             </div>
             <div>
               <p className="text-xs font-semibold text-white group-hover:text-cyan-200 transition-colors">Vision Scanner</p>
@@ -144,10 +144,10 @@ export const AttachmentBottomSheet: React.FC<AttachmentBottomSheetProps> = ({
           {/* 2. Gallery */}
           <button
             onClick={() => galleryInputRef.current?.click()}
-            className="w-full flex items-center gap-3.5 px-3.5 py-3 rounded-2xl hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors text-left group"
+            className="w-full flex items-center gap-3.5 px-3.5 py-3 rounded-2xl hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors text-left group cursor-pointer"
           >
-            <div className="p-2 bg-white/[0.06] group-hover:bg-purple-500/20 rounded-xl text-slate-300 group-hover:text-purple-300 transition-colors border border-white/5">
-              <ImageIcon className="w-5 h-5" />
+            <div className="p-2.5 bg-white/[0.06] group-hover:bg-purple-500/20 rounded-xl text-slate-300 group-hover:text-purple-300 transition-colors border border-white/10 shrink-0">
+              <ImageIcon className="w-5 h-5 stroke-[1.8]" />
             </div>
             <div>
               <p className="text-xs font-semibold text-white group-hover:text-purple-200 transition-colors">Gallery</p>
@@ -158,10 +158,10 @@ export const AttachmentBottomSheet: React.FC<AttachmentBottomSheetProps> = ({
           {/* 3. Files / Documents */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="w-full flex items-center gap-3.5 px-3.5 py-3 rounded-2xl hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors text-left group"
+            className="w-full flex items-center gap-3.5 px-3.5 py-3 rounded-2xl hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors text-left group cursor-pointer"
           >
-            <div className="p-2 bg-white/[0.06] group-hover:bg-emerald-500/20 rounded-xl text-slate-300 group-hover:text-emerald-300 transition-colors border border-white/5">
-              <FileText className="w-5 h-5" />
+            <div className="p-2.5 bg-white/[0.06] group-hover:bg-emerald-500/20 rounded-xl text-slate-300 group-hover:text-emerald-300 transition-colors border border-white/10 shrink-0">
+              <FileText className="w-5 h-5 stroke-[1.8]" />
             </div>
             <div>
               <p className="text-xs font-semibold text-white group-hover:text-emerald-200 transition-colors">Files & Documents</p>

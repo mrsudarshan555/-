@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { BarehandsGestureState } from '../types/gestures';
 import { BarehandsTracker } from '../services/gestures/barehandsTracker';
-import { CharacterTransform } from '../types';
 
 export const INITIAL_GESTURE_STATE: BarehandsGestureState = {
   isActive: false,
@@ -13,6 +12,10 @@ export const INITIAL_GESTURE_STATE: BarehandsGestureState = {
   twoHandDistance: null,
   twoHandScaleDelta: 1.0,
   handRotationDelta: 0,
+  scrollDeltaY: 0,
+  pointerPosition: null,
+  activeAction: 'idle',
+  actionFeedback: null,
   fps: 0,
   cameraPermission: 'prompt',
   isThrottled: true,
@@ -43,7 +46,7 @@ export function useBarehandsGesture(options?: UseBarehandsGestureOptions) {
 
       if (options?.characterLocked) return;
 
-      // 1. Hand-controlled rotation of the EXISTING Mayra 3D model
+      // 1. Hand-controlled rotation of the 3D model
       if (state.handRotationDelta !== 0 && options?.onRotateModel) {
         options.onRotateModel(state.handRotationDelta);
       }
@@ -53,7 +56,6 @@ export function useBarehandsGesture(options?: UseBarehandsGestureOptions) {
         if (options?.onPinchDrag) {
           options.onPinchDrag(state.pinchDragDelta.x, state.pinchDragDelta.y);
         } else if (options?.onRotateModel) {
-          // If no separate pinch drag, pinch drag drives rotation
           options.onRotateModel(state.pinchDragDelta.x * 120);
         }
       }
@@ -63,38 +65,12 @@ export function useBarehandsGesture(options?: UseBarehandsGestureOptions) {
         options.onScaleModel(state.twoHandScaleDelta);
       }
 
-      // 4. Render minimal skeleton overlay to debug canvas if mounted
+      // 4. Render 21 MediaPipe Skeleton on HUD canvas
       if (canvasRef.current && state.hands.length > 0) {
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-          state.hands.forEach((hand) => {
-            const isPinch = hand.isPinching;
-
-            // Draw Landmark Points
-            hand.landmarks.forEach((pt, i) => {
-              const x = (1 - pt.x) * canvas.width; // Mirrored for front camera
-              const y = pt.y * canvas.height;
-
-              ctx.beginPath();
-              ctx.arc(x, y, i === 4 || i === 8 ? 4 : 2, 0, 2 * Math.PI);
-              ctx.fillStyle = isPinch ? '#f59e0b' : '#06b6d4';
-              ctx.fill();
-            });
-
-            // Draw Pinch Ring if Pinching
-            if (isPinch) {
-              const px = (1 - hand.pinchPoint.x) * canvas.width;
-              const py = hand.pinchPoint.y * canvas.height;
-              ctx.beginPath();
-              ctx.arc(px, py, 14, 0, 2 * Math.PI);
-              ctx.strokeStyle = '#f59e0b';
-              ctx.lineWidth = 2;
-              ctx.stroke();
-            }
-          });
+          BarehandsTracker.drawSkeletonOnCanvas(ctx, canvas.width, canvas.height, state.hands, state.activeAction);
         }
       } else if (canvasRef.current) {
         const ctx = canvasRef.current.getContext('2d');
@@ -145,37 +121,20 @@ export function useBarehandsGesture(options?: UseBarehandsGestureOptions) {
     }
   }, [isEnabled, isLoading, enableTracking, disableTracking]);
 
-  // When overlay mounts, attach the video element to the active stream
+  // Subscribe to tracker updates
+  useEffect(() => {
+    const unsubscribe = tracker.subscribe(handleGestureUpdate);
+    return () => {
+      unsubscribe();
+    };
+  }, [tracker, handleGestureUpdate]);
+
+  // When overlay mounts, attach video element
   useEffect(() => {
     if (isEnabled && videoRef.current) {
       tracker.attachOverlayVideo(videoRef.current);
     }
   }, [isEnabled, tracker]);
-
-  // Pause camera when document is hidden (backgrounded) to conserve battery on mobile
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && isEnabled) {
-        console.log('[Barehands] Tab backgrounded, temporarily pausing camera stream...');
-        tracker.stop();
-      } else if (!document.hidden && isEnabled) {
-        console.log('[Barehands] Tab foregrounded, resuming camera stream...');
-        tracker.start(videoRef.current, handleGestureUpdate).catch(() => {});
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isEnabled, tracker, handleGestureUpdate]);
-
-  // Clean up completely on unmount
-  useEffect(() => {
-    return () => {
-      tracker.stop();
-    };
-  }, [tracker]);
 
   return {
     isEnabled,

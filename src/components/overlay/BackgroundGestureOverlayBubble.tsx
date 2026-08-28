@@ -1,12 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Hand, Mic, Camera, ShieldAlert, Sparkles, X, 
   Eye, Power, AlertCircle, RefreshCw, ChevronRight, Activity, Radio,
-  MousePointer, ArrowUp, Clock, CheckCircle2, Sliders, ExternalLink
+  MousePointer, ArrowUp, Clock, CheckCircle2, Sliders, ExternalLink,
+  Minimize2, Maximize2, Play, Flame, HelpCircle, Move
 } from 'lucide-react';
 import { MiniMayraAvatar } from '../character/MiniMayraAvatar';
 import { AssistantStatus, AppearanceConfig } from '../../types';
+import { GestureUsageService } from '../../services/gestures/gestureUsageService';
+import { GestureTutorialModal } from '../gestures/GestureTutorialModal';
+import { GesturePracticeModal } from '../gestures/GesturePracticeModal';
+import { BarehandsTracker } from '../../services/gestures/barehandsTracker';
+import { BarehandsGestureState, GestureThrowPayload, GestureClapClearPayload, GestureFistHoldPayload } from '../../types/gestures';
+import { GestureEventBus } from '../../services/gestures/gestureEventBus';
+import { GestureVoiceBridge } from '../../services/gestures/gestureVoiceBridge';
 
 interface BackgroundGestureOverlayBubbleProps {
   isEnabled: boolean;
@@ -35,10 +43,26 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
   const [detectedGesture, setDetectedGesture] = useState<string | null>(null);
   const [gestureFeedbackTimer, setGestureFeedbackTimer] = useState<number | null>(null);
 
+  // Daily Usage Counter State
+  const [todayUsageCount, setTodayUsageCount] = useState<number>(() => GestureUsageService.getTodayGestureCount());
+  const [badgePulse, setBadgePulse] = useState<boolean>(false);
+
+  // Tutorial & Practice Modals State
+  const [isTutorialOpen, setIsTutorialOpen] = useState<boolean>(false);
+  const [isPracticeOpen, setIsPracticeOpen] = useState<boolean>(false);
+
   // Floating bubble position coordinates
-  const [position, setPosition] = useState<{ x: number; y: number }>({ x: 20, y: 160 });
+  const [position, setPosition] = useState<{ x: number; y: number }>({ x: 18, y: 140 });
   const [isDragging, setIsDragging] = useState<boolean>(false);
-  const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number }>({ x: 0, y: 0, posX: 20, posY: 160 });
+  const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number }>({ x: 0, y: 0, posX: 18, posY: 140 });
+
+  // Floating PiP Camera Preview window coordinates & minimize state (persists across whole phone)
+  const [pipPosition, setPipPosition] = useState<{ x: number; y: number }>({ x: 16, y: 56 });
+  const [isPipMinimized, setIsPipMinimized] = useState<boolean>(false);
+  const [isPipDragging, setIsPipDragging] = useState<boolean>(false);
+  const pipDragStartRef = useRef<{ x: number; y: number; posX: number; posY: number }>({ x: 0, y: 0, posX: 16, posY: 56 });
+  const pipVideoRef = useRef<HTMLVideoElement | null>(null);
+  const pipCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // System-Wide Touch Tracking Pointer Cursor coordinates (Screen overlay)
   const [pointerPos, setPointerPos] = useState<{ x: number; y: number }>({ 
@@ -46,36 +70,274 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
     y: typeof window !== 'undefined' ? window.innerHeight * 0.48 : 360 
   });
   const [isPointerActive, setIsPointerActive] = useState<boolean>(true);
-  const [pointerActionEffect, setPointerActionEffect] = useState<'tap' | 'scroll' | 'hold' | null>(null);
+  const [pointerActionEffect, setPointerActionEffect] = useState<'tap' | 'scroll' | 'hold' | 'throw' | 'clap' | null>(null);
+  const [throwVector, setThrowVector] = useState<{ x: number; y: number; speed: number } | null>(null);
+  const [clapEffectActive, setClapEffectActive] = useState<boolean>(false);
   const [holdProgress, setHoldProgress] = useState<number>(0);
   const holdIntervalRef = useRef<number | null>(null);
 
-  // Sync state when enabled prop changes
+  const tracker = BarehandsTracker.getInstance();
+
+  // Helper to record gesture trigger & update badge
+  const recordGestureAction = useCallback((gestureName: string) => {
+    const updatedCount = GestureUsageService.incrementTodayGestureCount(gestureName);
+    setTodayUsageCount(updatedCount);
+    setBadgePulse(true);
+    setTimeout(() => setBadgePulse(false), 900);
+  }, []);
+
+  // Synthetic action triggers for UI testing & quick control
+  const dispatchSyntheticThrow = (dx = 0.8, dy = -0.6, speed = 1400) => {
+    const bus = GestureEventBus.getInstance();
+    bus.emit('GESTURE_THROW', {
+      direction: { x: dx, y: dy },
+      velocity: speed,
+      releasePosition: { x: pointerPos.x, y: pointerPos.y },
+      timestamp: performance.now()
+    });
+  };
+
+  const dispatchSyntheticClap = () => {
+    const bus = GestureEventBus.getInstance();
+    bus.emit('GESTURE_CLAP_CLEAR', {
+      distance: 0.06,
+      approachSpeed: 3200,
+      palmCenters: {
+        hand1: { x: 0.45, y: 0.5 },
+        hand2: { x: 0.55, y: 0.5 }
+      },
+      timestamp: performance.now()
+    });
+  };
+
+  // 1. MediaPipe Gesture Updates Callback
+  const handleTrackerUpdate = useCallback((state: BarehandsGestureState) => {
+    if (!state.isActive || isScreenLockedOrHidden || cameraStoppedDueToLock) return;
+
+    // Update screen pointer coordinates if hand detected
+    if (state.pointerPosition) {
+      setPointerPos(state.pointerPosition);
+    }
+
+    // Draw real 21 MediaPipe landmarks onto the PiP canvas
+    if (pipCanvasRef.current && state.hands.length > 0) {
+      const canvas = pipCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        BarehandsTracker.drawSkeletonOnCanvas(ctx, canvas.width, canvas.height, state.hands, state.activeAction);
+      }
+    } else if (pipCanvasRef.current) {
+      const ctx = pipCanvasRef.current.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, pipCanvasRef.current.width, pipCanvasRef.current.height);
+    }
+
+    // Full Scroll Capability (Up & Down)
+    if (Math.abs(state.scrollDeltaY) > 8) {
+      const isUp = state.scrollDeltaY < 0;
+      setPointerActionEffect('scroll');
+      setDetectedGesture(isUp ? 'Swipe Up: Scroll Up' : 'Swipe Down: Scroll Down');
+      recordGestureAction(isUp ? 'Swipe Up Scroll' : 'Swipe Down Scroll');
+
+      // Dispatch smooth scroll to document and any active scrolling view
+      window.scrollBy({ top: state.scrollDeltaY, behavior: 'smooth' });
+      const scrollableContainers = document.querySelectorAll('.overflow-y-auto, [data-scrollable="true"]');
+      scrollableContainers.forEach(container => {
+        container.scrollBy({ top: state.scrollDeltaY, behavior: 'smooth' });
+      });
+
+      if (gestureFeedbackTimer) window.clearTimeout(gestureFeedbackTimer);
+      const t = window.setTimeout(() => {
+        setPointerActionEffect(null);
+        setDetectedGesture(null);
+      }, 1400);
+      setGestureFeedbackTimer(t);
+    }
+
+    // Double-Tap Finger Click
+    if (state.activeAction === 'double_tap') {
+      const curX = state.pointerPosition ? state.pointerPosition.x : pointerPos.x;
+      const curY = state.pointerPosition ? state.pointerPosition.y : pointerPos.y;
+
+      setPointerActionEffect('tap');
+      setDetectedGesture(`Double-Tap: Click at (${Math.round(curX)}, ${Math.round(curY)})`);
+      recordGestureAction('Double-Tap Click');
+
+      const el = document.elementFromPoint(curX, curY);
+      if (el && el instanceof HTMLElement) {
+        el.click();
+      }
+
+      if (gestureFeedbackTimer) window.clearTimeout(gestureFeedbackTimer);
+      const t = window.setTimeout(() => {
+        setPointerActionEffect(null);
+        setDetectedGesture(null);
+      }, 1500);
+      setGestureFeedbackTimer(t);
+    }
+
+    // Hold Long-Press Action
+    if (state.activeAction === 'hold_long_press') {
+      const curX = state.pointerPosition ? state.pointerPosition.x : pointerPos.x;
+      const curY = state.pointerPosition ? state.pointerPosition.y : pointerPos.y;
+
+      setPointerActionEffect('hold');
+      setDetectedGesture(`Hold: Long Press at (${Math.round(curX)}, ${Math.round(curY)})`);
+      recordGestureAction('Hold Long Press');
+
+      const el = document.elementFromPoint(curX, curY);
+      if (el) {
+        el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      }
+
+      if (gestureFeedbackTimer) window.clearTimeout(gestureFeedbackTimer);
+      const t = window.setTimeout(() => {
+        setPointerActionEffect(null);
+        setDetectedGesture(null);
+      }, 1500);
+      setGestureFeedbackTimer(t);
+    }
+
+    // Dynamic Throw / Fling
+    if (state.activeAction === 'throw') {
+      setPointerActionEffect('throw');
+      setDetectedGesture('Throw / Fling Detected');
+      recordGestureAction('Throw / Fling');
+
+      if (gestureFeedbackTimer) window.clearTimeout(gestureFeedbackTimer);
+      const t = window.setTimeout(() => {
+        setPointerActionEffect(null);
+        setDetectedGesture(null);
+        setThrowVector(null);
+      }, 1600);
+      setGestureFeedbackTimer(t);
+    }
+
+    // Clap-to-Clear Action
+    if (state.activeAction === 'clap_clear') {
+      setPointerActionEffect('clap');
+      setClapEffectActive(true);
+      setDetectedGesture('Clap-to-Clear Triggered');
+      recordGestureAction('Clap-to-Clear');
+
+      if (gestureFeedbackTimer) window.clearTimeout(gestureFeedbackTimer);
+      const t = window.setTimeout(() => {
+        setPointerActionEffect(null);
+        setDetectedGesture(null);
+        setClapEffectActive(false);
+      }, 1600);
+      setGestureFeedbackTimer(t);
+    }
+  }, [isScreenLockedOrHidden, cameraStoppedDueToLock, pointerPos, gestureFeedbackTimer, recordGestureAction]);
+
+  // Subscribe to GestureEventBus for Throw & Clap animations
+  useEffect(() => {
+    const bus = GestureEventBus.getInstance();
+
+    const unsubThrow = bus.on('GESTURE_THROW', (payload: GestureThrowPayload) => {
+      setPointerActionEffect('throw');
+      setThrowVector({ x: payload.direction.x, y: payload.direction.y, speed: payload.velocity });
+      setDetectedGesture(`Throw / Fling: Speed ${Math.round(payload.velocity)}`);
+      recordGestureAction('Throw / Fling');
+
+      setTimeout(() => {
+        setPointerActionEffect(null);
+        setThrowVector(null);
+        setDetectedGesture(null);
+      }, 1600);
+    });
+
+    const unsubClap = bus.on('GESTURE_CLAP_CLEAR', (payload: GestureClapClearPayload) => {
+      setPointerActionEffect('clap');
+      setClapEffectActive(true);
+      setDetectedGesture('Clap-to-Clear: Workspace Cleared');
+      recordGestureAction('Clap-to-Clear');
+
+      setTimeout(() => {
+        setPointerActionEffect(null);
+        setClapEffectActive(false);
+        setDetectedGesture(null);
+      }, 1600);
+    });
+
+    const unsubFist = bus.on('GESTURE_FIST_HOLD', (payload: GestureFistHoldPayload) => {
+      setPointerActionEffect('hold');
+      setDetectedGesture('Emergency Freeze: Fist Hold');
+      recordGestureAction('Emergency Freeze');
+
+      setTimeout(() => {
+        setPointerActionEffect(null);
+        setDetectedGesture(null);
+      }, 1600);
+    });
+
+    return () => {
+      unsubThrow();
+      unsubClap();
+      unsubFist();
+    };
+  }, [recordGestureAction]);
+
+  // Sync with Voice Activation Bridge
+  useEffect(() => {
+    const unsubVoiceBridge = GestureVoiceBridge.subscribe((active) => {
+      if (active !== isEnabled) {
+        onToggleEnabled(active);
+      }
+    });
+    return () => {
+      unsubVoiceBridge();
+    };
+  }, [isEnabled, onToggleEnabled]);
+
+  // Subscribe to BarehandsTracker singleton
+  useEffect(() => {
+    const unsubscribe = tracker.subscribe(handleTrackerUpdate);
+    return () => {
+      unsubscribe();
+    };
+  }, [tracker, handleTrackerUpdate]);
+
+  // 2. Sync state when enabled prop changes & check for first-time tutorial
   useEffect(() => {
     if (isEnabled && !isScreenLockedOrHidden && !cameraStoppedDueToLock) {
       setIsCameraActive(true);
+      tracker.start(pipVideoRef.current, handleTrackerUpdate).then(() => {
+        if (pipVideoRef.current) {
+          tracker.attachOverlayVideo(pipVideoRef.current);
+        }
+      });
+      // First-time tutorial trigger
+      if (!GestureUsageService.hasCompletedGestureTutorial()) {
+        setTimeout(() => setIsTutorialOpen(true), 350);
+      }
     } else if (!isEnabled) {
       setIsCameraActive(false);
       setCameraStoppedDueToLock(false);
+      tracker.stop();
     }
-  }, [isEnabled, isScreenLockedOrHidden, cameraStoppedDueToLock]);
+  }, [isEnabled, isScreenLockedOrHidden, cameraStoppedDueToLock, tracker, handleTrackerUpdate]);
 
-  // Privacy Rule: Monitor Screen Lock / Visibility Change
+  // Attach overlay video when PiP opens or updates
+  useEffect(() => {
+    if (isEnabled && isCameraActive && pipVideoRef.current) {
+      tracker.attachOverlayVideo(pipVideoRef.current);
+    }
+  }, [isEnabled, isCameraActive, isPipMinimized, tracker]);
+
+  // 3. Privacy Rule: Monitor Screen Lock / Visibility Change
   // When screen turns off / locked, immediately shut down camera
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        // Screen locked or tab backgrounded -> Immediate camera termination
         console.log('[MAYRA Background Gesture] Screen lock/hidden detected -> Automatically shutting off camera for privacy');
         setIsScreenLockedOrHidden(true);
         if (isEnabled && isCameraActive) {
           setIsCameraActive(false);
           setCameraStoppedDueToLock(true);
+          tracker.pauseDueToLock();
         }
       } else {
-        // User unlocked phone -> Screen is back
         setIsScreenLockedOrHidden(false);
-        // Stays OFF per requirement: User must manually reactivate!
         console.log('[MAYRA Background Gesture] Screen unlocked -> Camera remains OFF until user manually reactivates');
       }
     };
@@ -86,6 +348,7 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
         if (isEnabled && isCameraActive) {
           setIsCameraActive(false);
           setCameraStoppedDueToLock(true);
+          tracker.pauseDueToLock();
         }
       }
     };
@@ -97,9 +360,9 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
     };
-  }, [isEnabled, isCameraActive]);
+  }, [isEnabled, isCameraActive, tracker]);
 
-  // Smooth autonomous hand-tracking drift for visual pointer simulation when active
+  // 4. Smooth autonomous hand-tracking drift for visual pointer simulation when active
   useEffect(() => {
     if (!isCameraActive || !isPointerActive) return;
 
@@ -128,7 +391,8 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
 
     setPointerActionEffect('tap');
     setDetectedGesture(`Double-Tap: Click at (${Math.round(targetX)}, ${Math.round(targetY)})`);
-    
+    recordGestureAction('Double-Tap Click');
+
     // Simulate DOM element click at pointer position
     const el = document.elementFromPoint(targetX, targetY);
     if (el && el instanceof HTMLElement) {
@@ -149,6 +413,7 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
 
     setPointerActionEffect('scroll');
     setDetectedGesture('Swipe Up: Scrolling feed upward');
+    recordGestureAction('Swipe Up Scroll');
 
     // Scroll active view
     window.scrollBy({ top: -350, behavior: 'smooth' });
@@ -171,6 +436,7 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
 
     setPointerActionEffect('hold');
     setDetectedGesture(`Hold: Long Press at (${Math.round(targetX)}, ${Math.round(targetY)})`);
+    recordGestureAction('Hold Long Press');
 
     let progress = 0;
     if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
@@ -192,9 +458,13 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
     }, 40);
   };
 
-  const handleManualResumeCamera = () => {
+  const handleManualResumeCamera = async () => {
     setCameraStoppedDueToLock(false);
     setIsCameraActive(true);
+    await tracker.resumeFromLock();
+    if (pipVideoRef.current) {
+      tracker.attachOverlayVideo(pipVideoRef.current);
+    }
   };
 
   // Drag handlers for floating bubble
@@ -229,6 +499,30 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
   const handleBubbleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onTriggerVoice();
+  };
+
+  // Drag handlers for PiP camera window
+  const handlePipPointerDown = (e: React.PointerEvent) => {
+    setIsPipDragging(false);
+    pipDragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      posX: pipPosition.x,
+      posY: pipPosition.y
+    };
+  };
+
+  const handlePipPointerMove = (e: React.PointerEvent) => {
+    if (e.buttons !== 1) return;
+    const dx = e.clientX - pipDragStartRef.current.x;
+    const dy = e.clientY - pipDragStartRef.current.y;
+    if (Math.hypot(dx, dy) > 5) {
+      setIsPipDragging(true);
+      setPipPosition({
+        x: Math.max(10, Math.min(window.innerWidth - 140, pipDragStartRef.current.posX + dx)),
+        y: Math.max(45, Math.min(window.innerHeight - 150, pipDragStartRef.current.posY + dy))
+      });
+    }
   };
 
   if (!isEnabled) {
@@ -288,6 +582,15 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
             </button>
           )}
 
+          {/* Quick Practice Mode Button */}
+          <button
+            onClick={() => setIsPracticeOpen(true)}
+            className="p-1 rounded-full text-purple-300 hover:text-white hover:bg-purple-500/20 transition-colors ml-0.5"
+            title="Open Gesture Practice Sandbox"
+          >
+            <Flame className="w-3.5 h-3.5" />
+          </button>
+
           {/* Quick Close / Disable Toggle */}
           <button
             onClick={() => onToggleEnabled(false)}
@@ -317,8 +620,8 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
             {/* Outer halo ring */}
             <motion.div
               animate={{
-                scale: pointerActionEffect === 'hold' ? [1, 1.4, 1.2] : pointerActionEffect === 'tap' ? [1, 1.6, 1] : [1, 1.15, 1],
-                borderColor: pointerActionEffect === 'tap' ? '#22D3EE' : pointerActionEffect === 'hold' ? '#EC4899' : pointerActionEffect === 'scroll' ? '#A855F7' : '#06B6D4'
+                scale: pointerActionEffect === 'hold' ? [1, 1.4, 1.2] : pointerActionEffect === 'tap' ? [1, 1.6, 1] : pointerActionEffect === 'throw' ? [1, 1.8, 0.9] : pointerActionEffect === 'clap' ? [1.8, 0.6, 1.4, 1] : [1, 1.15, 1],
+                borderColor: pointerActionEffect === 'tap' ? '#22D3EE' : pointerActionEffect === 'hold' ? '#EC4899' : pointerActionEffect === 'scroll' ? '#A855F7' : pointerActionEffect === 'throw' ? '#F59E0B' : pointerActionEffect === 'clap' ? '#10B981' : '#06B6D4'
               }}
               transition={{ duration: 0.3 }}
               className="w-10 h-10 rounded-full border-2 border-cyan-400/80 bg-cyan-500/15 shadow-[0_0_16px_rgba(6,182,212,0.6)] flex items-center justify-center"
@@ -335,6 +638,40 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
                 transition={{ duration: 0.45 }}
                 className="absolute inset-0 rounded-full border-2 border-cyan-300"
               />
+            )}
+
+            {/* Throw / Fling Kinetic Vector Trail */}
+            {pointerActionEffect === 'throw' && (
+              <motion.div
+                initial={{ scale: 0.8, opacity: 1, x: 0, y: 0 }}
+                animate={{
+                  scale: 2.2,
+                  opacity: 0,
+                  x: throwVector ? throwVector.x * 90 : 60,
+                  y: throwVector ? throwVector.y * 90 : -50
+                }}
+                transition={{ duration: 0.55 }}
+                className="absolute flex items-center justify-center text-amber-400"
+              >
+                <div className="flex flex-col items-center">
+                  <Sparkles className="w-6 h-6 drop-shadow-[0_0_12px_#F59E0B] animate-spin" />
+                  <span className="text-[8px] font-mono font-bold bg-amber-950/90 text-amber-200 px-1 py-0.2 rounded mt-1">
+                    FLING
+                  </span>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Clap-to-Clear Collision Burst Wave */}
+            {(pointerActionEffect === 'clap' || clapEffectActive) && (
+              <motion.div
+                initial={{ scale: 3.5, opacity: 0.9 }}
+                animate={{ scale: 0.2, opacity: 0 }}
+                transition={{ duration: 0.45, ease: 'easeIn' }}
+                className="absolute inset-0 -m-8 rounded-full border-4 border-emerald-400/90 bg-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.8)] flex items-center justify-center"
+              >
+                <Hand className="w-8 h-8 text-emerald-300 drop-shadow-[0_0_10px_#10B981]" />
+              </motion.div>
             )}
 
             {/* Scroll Action Trail */}
@@ -374,7 +711,95 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
         </div>
       )}
 
-      {/* 3. FLOATING BUBBLE / CHAT-HEAD (Messenger Style on Home Screen) */}
+      {/* 3. PERSISTENT FLOATING PIP CAMERA PREVIEW WINDOW (Outside & Inside App) */}
+      {isCameraActive && (
+        <div
+          id="mayra-pip-camera-preview-window"
+          style={{
+            position: 'fixed',
+            left: `${pipPosition.x}px`,
+            top: `${pipPosition.y}px`,
+            zIndex: 9992
+          }}
+          onPointerDown={handlePipPointerDown}
+          onPointerMove={handlePipPointerMove}
+          className="pointer-events-auto select-none touch-none"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={`rounded-2xl backdrop-blur-2xl border transition-all overflow-hidden shadow-[0_10px_35px_rgba(0,0,0,0.85)] ${
+              isPipMinimized 
+                ? 'w-32 bg-black/85 border-rose-500/50 p-1.5 flex items-center justify-between' 
+                : 'w-36 bg-[#060A1A]/95 border-rose-500/70 p-2 flex flex-col gap-1.5'
+            }`}
+          >
+            {/* PiP Header */}
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping shrink-0" />
+                <span className="text-[8px] font-mono font-bold text-rose-300 tracking-wider truncate uppercase">
+                  {isPipMinimized ? 'CAM ACTIVE' : 'PiP Tracking'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsPipMinimized(prev => !prev);
+                  }}
+                  className="p-0.5 text-slate-400 hover:text-white rounded hover:bg-white/10"
+                  title={isPipMinimized ? 'Expand PiP Preview' : 'Minimize PiP Preview'}
+                >
+                  {isPipMinimized ? <Maximize2 className="w-2.5 h-2.5" /> : <Minimize2 className="w-2.5 h-2.5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* PiP Expanded Video Feed / Landmark Canvas */}
+            {!isPipMinimized && (
+              <div className="w-full h-24 rounded-xl bg-black border border-white/10 relative overflow-hidden flex items-center justify-center">
+                <video
+                  ref={pipVideoRef}
+                  className="w-full h-full object-cover -scale-x-100 opacity-40"
+                  playsInline
+                  muted
+                  autoPlay
+                />
+
+                {/* Real 21 MediaPipe Skeleton Canvas */}
+                <canvas
+                  ref={pipCanvasRef}
+                  width={160}
+                  height={96}
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                />
+
+                {/* Camera Live Tag */}
+                <div className="absolute bottom-1 left-1 px-1 py-0.2 rounded bg-black/80 font-mono text-[7px] text-rose-300 border border-rose-500/40">
+                  MediaPipe 21P
+                </div>
+
+                {/* Drag Handle Icon */}
+                <div className="absolute bottom-1 right-1 p-0.5 text-slate-400/80">
+                  <Move className="w-2.5 h-2.5" />
+                </div>
+              </div>
+            )}
+
+            {/* PiP Footer Info */}
+            {!isPipMinimized && (
+              <div className="flex items-center justify-between text-[7px] font-mono text-slate-400 pt-0.5 border-t border-white/10">
+                <span className="text-cyan-300">21 Nodes</span>
+                <span className="text-emerald-400">PHONE-WIDE</span>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+
+      {/* 4. FLOATING BUBBLE / CHAT-HEAD (Messenger Style on Home Screen) */}
       <div
         id="mayra-floating-gesture-bubble"
         style={{
@@ -415,13 +840,23 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
                 appearanceConfig={appearanceConfig}
               />
 
-              {/* Hand Gesture Icon Badge */}
+              {/* Hand Gesture Icon Indicator */}
               <div className={`absolute bottom-0.5 right-0.5 p-1 rounded-full ${
                 isCameraActive ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-700 text-slate-400'
               } shadow-md`}>
                 <Hand className="w-2.5 h-2.5" />
               </div>
             </div>
+
+            {/* 5. USAGE COUNTER / BADGE (Top-Right of Bubble) */}
+            <motion.div
+              animate={badgePulse ? { scale: [1, 1.45, 1], rotate: [0, -10, 10, 0] } : { scale: 1 }}
+              transition={{ duration: 0.4 }}
+              className="absolute -top-1 -right-1 px-1.5 py-0.5 min-w-[20px] rounded-full bg-gradient-to-r from-rose-500 to-pink-600 text-white font-mono text-[9px] font-extrabold flex items-center justify-center border border-white shadow-[0_0_10px_rgba(244,63,94,0.7)]"
+              title={`Today's Gesture Count: ${todayUsageCount}`}
+            >
+              {todayUsageCount}
+            </motion.div>
           </motion.div>
 
           {/* Gesture Detection Feedback Toast */}
@@ -448,13 +883,13 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
                 exit={{ opacity: 0, scale: 0.85, y: -10 }}
                 className="absolute left-16 top-0 w-72 bg-[#0A0E24]/95 backdrop-blur-2xl border border-cyan-500/30 rounded-2xl p-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.85)] flex flex-col gap-3 z-30"
               >
-                {/* Header */}
+                {/* Header with Usage Counter */}
                 <div className="flex items-center justify-between border-b border-white/10 pb-2">
                   <div className="flex items-center gap-1.5">
                     <Hand className="w-4 h-4 text-cyan-400" />
                     <div>
-                      <h4 className="text-xs font-bold text-white font-sans">System-Wide Touch Gestures</h4>
-                      <p className="text-[9px] text-slate-400 font-mono">AccessibilityService Dispatcher</p>
+                      <h4 className="text-xs font-bold text-white font-sans">Background Hand-Gesture</h4>
+                      <p className="text-[9px] text-slate-400 font-mono">Accessibility Touchless Control</p>
                     </div>
                   </div>
                   <button
@@ -465,15 +900,53 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
                   </button>
                 </div>
 
-                {/* Accessibility Service Status */}
-                <div className="p-2 rounded-xl bg-cyan-950/30 border border-cyan-500/30 text-[10px] font-mono flex items-center justify-between text-cyan-300">
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span>Service: MayraGestureA11y</span>
+                {/* Today's Usage Counter Card */}
+                <div className="p-2.5 rounded-xl bg-gradient-to-r from-rose-950/40 via-purple-950/30 to-cyan-950/40 border border-rose-500/30 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-300">
+                      <Activity className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-white block">Today&apos;s Gestures Used</span>
+                      <span className="text-[8px] text-slate-400 font-mono">System-wide triggers</span>
+                    </div>
                   </div>
-                  <span className="px-1.5 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 rounded text-[8px] font-bold uppercase">
-                    ACTIVE
+                  <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/50 text-rose-300 font-mono font-extrabold text-xs">
+                    {todayUsageCount} actions
                   </span>
+                </div>
+
+                {/* Quick Practice & Tutorial Launch Buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Practice / Test Sandbox Button */}
+                  <button
+                    onClick={() => {
+                      setIsExpanded(false);
+                      setIsPracticeOpen(true);
+                    }}
+                    className="p-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/40 text-purple-200 border border-purple-500/40 flex items-center gap-1.5 transition-all text-left"
+                  >
+                    <Flame className="w-4 h-4 text-purple-400 shrink-0" />
+                    <div>
+                      <span className="text-[10px] font-bold block">Test / Practice</span>
+                      <span className="text-[8px] text-purple-300/80 font-mono">Zero-risk sandbox</span>
+                    </div>
+                  </button>
+
+                  {/* Tutorial Guide Button */}
+                  <button
+                    onClick={() => {
+                      setIsExpanded(false);
+                      setIsTutorialOpen(true);
+                    }}
+                    className="p-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-200 border border-cyan-500/40 flex items-center gap-1.5 transition-all text-left"
+                  >
+                    <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <div>
+                      <span className="text-[10px] font-bold block">View Tutorial</span>
+                      <span className="text-[8px] text-cyan-300/80 font-mono">Gesture guide</span>
+                    </div>
+                  </button>
                 </div>
 
                 {/* Gesture Mapping Test Triggers */}
@@ -532,6 +1005,40 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
                     </div>
                     <span className="text-[9px] px-1.5 py-0.5 bg-pink-900/60 text-pink-300 rounded font-mono">Hold 800ms</span>
                   </button>
+
+                  {/* 4. Throw / Fling */}
+                  <button
+                    onClick={() => dispatchSyntheticThrow(0.85, -0.5, 1600)}
+                    className="p-2 bg-white/[0.05] hover:bg-amber-500/20 text-slate-200 hover:text-amber-200 border border-white/10 rounded-xl flex items-center justify-between transition-all text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded-lg bg-amber-500/20 text-amber-300">
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold block">Throw / Fling</span>
+                        <span className="text-[8px] text-slate-400 font-mono">Pinch + High-Speed Release</span>
+                      </div>
+                    </div>
+                    <span className="text-[9px] px-1.5 py-0.5 bg-amber-900/60 text-amber-300 rounded font-mono">Fling</span>
+                  </button>
+
+                  {/* 5. Clap to Clear */}
+                  <button
+                    onClick={() => dispatchSyntheticClap()}
+                    className="p-2 bg-white/[0.05] hover:bg-emerald-500/20 text-slate-200 hover:text-emerald-200 border border-white/10 rounded-xl flex items-center justify-between transition-all text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-300">
+                        <Hand className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold block">Clap to Clear</span>
+                        <span className="text-[8px] text-slate-400 font-mono">Two-Hand Rapid Collision</span>
+                      </div>
+                    </div>
+                    <span className="text-[9px] px-1.5 py-0.5 bg-emerald-900/60 text-emerald-300 rounded font-mono">Clear</span>
+                  </button>
                 </div>
 
                 {/* Open Full App Button */}
@@ -572,6 +1079,20 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
           </AnimatePresence>
         </div>
       </div>
+
+      {/* 5. INTERACTIVE ONBOARDING TUTORIAL MODAL (First Time or On Demand) */}
+      <GestureTutorialModal
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
+        onOpenPracticeMode={() => setIsPracticeOpen(true)}
+      />
+
+      {/* 6. ZERO-RISK TEST / PRACTICE SANDBOX MODAL */}
+      <GesturePracticeModal
+        isOpen={isPracticeOpen}
+        onClose={() => setIsPracticeOpen(false)}
+        onOpenTutorial={() => setIsTutorialOpen(true)}
+      />
     </>
   );
 };

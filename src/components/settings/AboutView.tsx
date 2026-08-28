@@ -1,12 +1,13 @@
 import React from 'react';
-import { Sparkles, Terminal, ShieldCheck, Heart, Info, Code2, ArrowLeft } from 'lucide-react';
+import { Sparkles, Terminal, ShieldCheck, Heart, Info, Code2, ArrowLeft, RefreshCw } from 'lucide-react';
 import { MayraLogo } from '../common/MayraLogo';
 
 interface AboutViewProps {
   onBack: () => void;
+  onOpenOnboarding?: () => void;
 }
 
-export const AboutView: React.FC<AboutViewProps> = ({ onBack }) => {
+export const AboutView: React.FC<AboutViewProps> = ({ onBack, onOpenOnboarding }) => {
   return (
     <div className="flex-1 flex flex-col overflow-y-auto bg-[#070913] text-slate-200">
       
@@ -44,6 +45,16 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBack }) => {
           <div className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-mono text-slate-300">
             Version 2.0.0-phase2 (Settings & System UI)
           </div>
+
+          {onOpenOnboarding && (
+            <button
+              onClick={onOpenOnboarding}
+              className="mt-2 py-2 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-cyan-500 to-indigo-600 hover:opacity-90 text-white font-bold text-xs flex items-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all active:scale-95"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Onboarding Dobara Dekhein (Replay Tour)</span>
+            </button>
+          )}
         </div>
 
         {/* Technical Specs Card */}

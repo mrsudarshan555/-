@@ -59,6 +59,64 @@ export const AssistantSettingsView: React.FC<AssistantSettingsViewProps> = ({
 
       <div className="p-4 space-y-4 text-xs font-sans pb-8">
         
+        {/* AI Assistant Core Engine Selector (MAYRA vs STONICX) */}
+        <div className="p-3.5 bg-gradient-to-br from-[#121028] via-[#0E1528] to-[#0A0E1A] border border-purple-500/30 rounded-2xl space-y-3 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] font-mono font-bold text-purple-300 uppercase flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" /> AI Assistant Core Engine
+            </div>
+            <span className="text-[9px] font-mono text-purple-300 font-bold uppercase bg-purple-950/60 border border-purple-500/30 px-2 py-0.5 rounded-full">
+              Full Shell Switch
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            {/* MAYRA Option */}
+            <button
+              onClick={() => onChange({ activeMode: 'mayra' })}
+              className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden ${
+                (config.activeMode || 'mayra') === 'mayra'
+                  ? 'bg-purple-600/25 border-purple-400 text-white shadow-[0_0_15px_rgba(168,85,247,0.25)]'
+                  : 'bg-[#070913] border-white/10 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-xs text-purple-200 flex items-center gap-1">
+                  ⭐ MAYRA
+                </span>
+                {(config.activeMode || 'mayra') === 'mayra' && (
+                  <span className="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_6px_#c084fc]" />
+                )}
+              </div>
+              <p className="text-[9px] text-slate-300 leading-snug">
+                3D Interactive Companion, Emotional Intelligence, Pastel Cosy UI & Voice
+              </p>
+            </button>
+
+            {/* STONICX Option */}
+            <button
+              onClick={() => onChange({ activeMode: 'stonicx' })}
+              className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden ${
+                config.activeMode === 'stonicx'
+                  ? 'bg-amber-500/20 border-amber-400 text-white shadow-[0_0_15px_rgba(245,158,11,0.25)]'
+                  : 'bg-[#070913] border-white/10 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-xs text-amber-400 flex items-center gap-1">
+                  ⚡ STONICX
+                </span>
+                {config.activeMode === 'stonicx' && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_#f59e0b]" />
+                )}
+              </div>
+              <p className="text-[9px] text-slate-300 leading-snug">
+                Living Circuit-Board Visualizer, Quantum Terminal, Isolated Neural Vault
+              </p>
+            </button>
+          </div>
+        </div>
+
         {/* Assistant Persona Tone */}
         <div className="p-3.5 bg-[#0C1021] border border-purple-500/20 rounded-2xl space-y-3">
           <div className="text-[11px] font-mono font-bold text-purple-400 uppercase flex items-center gap-1.5">

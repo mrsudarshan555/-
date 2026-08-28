@@ -20,6 +20,7 @@ import { MayraSystemBridge } from '../services/native/MayraSystemIntegrationBrid
 import { MemoryVaultService } from '../services/memory/memoryVaultService';
 import { ContinuousConversationEngine } from '../services/voice/continuousConversationEngine';
 import { MayraAgentEngine } from '../services/agent/agentEngine';
+import { GestureVoiceBridge } from '../services/gestures/gestureVoiceBridge';
 
 export interface UseMayraAssistantProps {
   personalConfig: UserPersonalConfig;
@@ -413,6 +414,23 @@ export function useMayraAssistant({ personalConfig, assistantConfig, memories = 
     activeModelMsgIdRef.current = null;
 
     const lower = (trimmed || '').toLowerCase();
+
+    // 0. Voice-Activated Gesture Toggle Intent Bridge ("gesture chalu karo", "gesture band karo", etc.)
+    if (!image) {
+      const gestureIntent = GestureVoiceBridge.parseIntent(trimmed);
+      if (gestureIntent.isMatch) {
+        const result = await GestureVoiceBridge.executeVoiceCommand(trimmed);
+        const assistantMsg: ChatMessage = {
+          id: `msg-m-gesture-${Date.now()}`,
+          sender: 'mayra',
+          text: result.replyText,
+          timestamp: Date.now()
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+        speakText(result.replyText, detected, handleSpeechStart, handleSpeechEnd);
+        return;
+      }
+    }
 
     // Check if user request is an actionable task or tool execution command
     const isAgentTask = !image && (
