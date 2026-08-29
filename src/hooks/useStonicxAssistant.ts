@@ -22,6 +22,17 @@ import {
   DEFAULT_STONICX_PROFILE
 } from '../utils/stonicxMemoryStore';
 
+import { DelegationRouter } from '../services/router/delegationRouter';
+import { ThinkingAudioBridge } from '../services/audio/thinkingAudioBridge';
+import { ThinkingProgressEngine } from '../services/audio/thinkingProgressEngine';
+import { AudioDuckingManager } from '../services/audio/audioDuckingManager';
+import { VoicePipeline } from '../services/audio/voicePipeline';
+import { StonicxMemoryIndexer } from '../services/stonicx/memoryIndexer';
+import { MemorySyncBridge } from '../services/memory/memorySyncBridge';
+import { MemoryQueryEngine } from '../services/memory/memoryQueryEngine';
+import { ToolExecutor } from '../services/tools/toolExecutor';
+import { ToolExecutionResult } from '../services/tools/types';
+
 // Backwards compatibility for legacy components
 export interface StonicxMemoryItem {
   id: string;
@@ -46,9 +57,10 @@ const INITIAL_STONICX_MESSAGES: ChatMessage[] = [
 export interface UseStonicxAssistantProps {
   personalConfig: UserPersonalConfig;
   assistantConfig: AssistantConfig;
+  onSwitchToMayra?: () => void;
 }
 
-export function useStonicxAssistant({ personalConfig, assistantConfig }: UseStonicxAssistantProps) {
+export function useStonicxAssistant({ personalConfig, assistantConfig, onSwitchToMayra }: UseStonicxAssistantProps) {
   const [status, setStatus] = useState<AssistantStatus>('READY');
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -109,83 +121,11 @@ export function useStonicxAssistant({ personalConfig, assistantConfig }: UseSton
     saveStonicxDailyLogs(dailyLogs);
   }, [dailyLogs]);
 
-  // Speech Recognition (Mic)
-  const recognitionRef = useRef<any>(null);
-  const isListeningRef = useRef(false);
+  // Continuous Voice Pipeline Integration (Full-Duplex + 500ms post-speech auto re-arm)
+  const voicePipelineRef = useRef<VoicePipeline>(VoicePipeline.getInstance());
 
-  const startListening = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert('Speech Recognition is not supported in this browser.');
-      return;
-    }
+  const submitPromptRef = useRef<(text: string, image?: any) => Promise<void>>(async () => {});
 
-    if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch (e) {}
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    recognition.onstart = () => {
-      isListeningRef.current = true;
-      setStatus('LISTENING');
-    };
-
-    recognition.onresult = (event: any) => {
-      let transcript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      if (transcript) {
-        setInputText(transcript);
-      }
-    };
-
-    recognition.onerror = () => {
-      isListeningRef.current = false;
-      setStatus('READY');
-    };
-
-    recognition.onend = () => {
-      isListeningRef.current = false;
-      if (inputText.trim()) {
-        submitPrompt(inputText.trim());
-      } else {
-        setStatus('READY');
-      }
-    };
-
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-    } catch (e) {
-      setStatus('READY');
-    }
-  }, [inputText]);
-
-  const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {}
-    }
-    isListeningRef.current = false;
-    setStatus('READY');
-  }, []);
-
-  const triggerVoice = useCallback(() => {
-    if (status === 'LISTENING') {
-      stopListening();
-    } else {
-      startListening();
-    }
-  }, [status, startListening, stopListening]);
-
-  // Synthetic Voice Engine (Prioritizes Gemini Live Charon Voice Audio)
   const speakStonicxResponse = useCallback(async (text: string) => {
     if (!text || typeof window === 'undefined') return;
     
@@ -194,6 +134,15 @@ export function useStonicxAssistant({ personalConfig, assistantConfig }: UseSton
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
+
+    voicePipelineRef.current.onSpeechStart();
+    AudioDuckingManager.getInstance().duck({ duckGain: 0.20, rampDownTimeSec: 0.15 });
+
+    const handleSpeechEnd = () => {
+      setStatus('READY');
+      AudioDuckingManager.getInstance().restore({ rampUpTimeSec: 0.30 });
+      voicePipelineRef.current.onSpeechEnd();
+    };
 
     try {
       // 1. Primary: Fetch Gemini Charon PCM Audio
@@ -214,7 +163,7 @@ export function useStonicxAssistant({ personalConfig, assistantConfig }: UseSton
           const played = playPcmAudio(
             data.audioBase64,
             () => setStatus('SPEAKING'),
-            () => setStatus('READY')
+            handleSpeechEnd
           );
           if (played) return;
         }
@@ -250,11 +199,34 @@ export function useStonicxAssistant({ personalConfig, assistantConfig }: UseSton
       if (maleVoice) utterance.voice = maleVoice;
 
       utterance.onstart = () => setStatus('SPEAKING');
-      utterance.onend = () => setStatus('READY');
-      utterance.onerror = () => setStatus('READY');
+      utterance.onend = handleSpeechEnd;
+      utterance.onerror = handleSpeechEnd;
 
       window.speechSynthesis.speak(utterance);
+    } else {
+      handleSpeechEnd();
     }
+  }, []);
+
+  const triggerVoice = useCallback(() => {
+    const pipeline = voicePipelineRef.current;
+    if (status === 'LISTENING' || pipeline.isRunning()) {
+      pipeline.stop();
+      setStatus('READY');
+    } else {
+      pipeline.start();
+      setStatus('LISTENING');
+    }
+  }, [status]);
+
+  const startListening = useCallback(() => {
+    voicePipelineRef.current.start();
+    setStatus('LISTENING');
+  }, []);
+
+  const stopListening = useCallback(() => {
+    voicePipelineRef.current.stop();
+    setStatus('READY');
   }, []);
 
   // Submit Prompt to Gemini with STONICX AI Priming Pattern
@@ -290,10 +262,46 @@ export function useStonicxAssistant({ personalConfig, assistantConfig }: UseSton
 
     setMessages((prev) => [...prev, userMsg]);
     setInputText('');
+
+    // STONICX -> MAYRA Autonomous Task Delegation & Direct Switch Router
+    if (!image && trimmed) {
+      const decision = await DelegationRouter.routePrompt({
+        prompt: trimmed,
+        currentPersona: 'STONICX',
+        chatHistory: messages,
+        onModeSwitch: (mode) => {
+          if (mode === 'mayra' && onSwitchToMayra) {
+            onSwitchToMayra();
+          }
+        }
+      });
+
+      if (decision.shouldDelegate && decision.targetPersona === 'MAYRA') {
+        const returnMsgText = 'Task execution complete. Switching back to MAYRA.';
+        const assistantMsg: ChatMessage = {
+          id: `stx-m-return-${Date.now()}`,
+          sender: 'mayra',
+          text: returnMsgText,
+          timestamp: Date.now()
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+        setStatus('READY');
+        return;
+      }
+    }
+
     setStatus('THINKING');
     setIsProcessing(true);
+    ThinkingProgressEngine.getInstance().startDualLayerThinking({ persona: 'STONICX', enableSpokenCommentary: true });
 
     const userName = profile.preferredName || profile.fullName || personalConfig.preferredName || 'Commander';
+
+    // 1.5 Autonomous Tool Calling Check (Phase G)
+    let autonomousToolResult: ToolExecutionResult | null = null;
+    const detectedTool = ToolExecutor.getInstance().detectToolIntent(trimmed);
+    if (detectedTool) {
+      autonomousToolResult = await ToolExecutor.getInstance().executeToolCall(detectedTool, 'STONICX', true);
+    }
 
     // 2. Filter Relevant Topic Notes for Priming
     const relevantNotes = topicNotes.filter(note => {
@@ -314,7 +322,12 @@ export function useStonicxAssistant({ personalConfig, assistantConfig }: UseSton
       .map(l => `• [${l.date}] Topics: ${l.keyTopics.join(', ')} | Summary: ${l.summary}`)
       .join('\n');
 
-    // 4. Construct Comprehensive AI Priming System Prompt
+    // 4. Cross-Brain Shared Vault Query & Prompt Injection
+    const vaultQuery = MemoryQueryEngine.getInstance().queryVault(trimmed, 'STONICX');
+    const recalledVaultContext = MemoryQueryEngine.getInstance().formatQueryResultForPrompt(vaultQuery);
+    const sharedVaultSystemPrompt = MemorySyncBridge.getInstance().generateSystemContextPrompt('STONICX');
+
+    // 5. Construct Comprehensive AI Priming System Prompt
     const stonicxSystemPrompt = `You are STONICX, an autonomous High-Performance Cybernetic AI Operating System and Neural Computing Engine.
 
 ============================================================
@@ -323,8 +336,19 @@ PRIMARY IDENTITY & DIRECTIVES:
 - Name: STONICX
 - Persona: High-velocity, analytical, concise, direct, authoritative, technologically formidable, zero fluff.
 - Output Style: Crisp markdown with bold headings, clean bullet structures, code blocks with syntax highlighting, benchmark stats where relevant.
-- Privacy & Memory Isolation: You operate on a dedicated 100% ISOLATED Neural Vault. You NEVER reference or share conversational state with Mayra.
+- Dual-Brain Architecture: You share the same underlying Markdown Memory Vault with MAYRA, allowing bidirectional recall while preserving your distinct hyper-technical persona.
 - Language: Answer in English or Hindi matching user tone, keeping technical depth pristine.
+
+${sharedVaultSystemPrompt}
+${recalledVaultContext}
+${autonomousToolResult ? `
+============================================================
+AUTONOMOUS TOOL EXECUTION RESULT [${autonomousToolResult.tool.toUpperCase()}]:
+============================================================
+Summary: ${autonomousToolResult.summary}
+Payload:
+${JSON.stringify(autonomousToolResult.data, null, 2)}
+` : ''}
 
 ============================================================
 1. USER PROFILE FILE (SELF-UPDATING AI PRIMING FILE):
@@ -358,7 +382,7 @@ ${activeJob.primerPrompt}
 ` : ''}
 
 CRITICAL EXECUTION INSTRUCTION:
-Synthesize your response by applying the primed user profile, topic notes, and active job constraints first. If the user asks about past discussions or yesterday ("kal kya baat hui thi"), consult the Daily Logs above. If the user provides new personal facts, acknowledge them briefly and accurately.
+Synthesize your response by applying the primed user profile, shared memory vault, and active job constraints first. If the user asks about past discussions or yesterday ("kal kya baat hui thi"), consult the Daily Logs and Memory Vault. If the user provides new personal facts, acknowledge them briefly and accurately.
 `;
 
     try {
@@ -425,20 +449,31 @@ Synthesize your response by applying the primed user profile, topic notes, and a
       setMessages((prev) => [...prev, assistantMsg]);
       setStatus('READY');
       setIsProcessing(false);
+      ThinkingProgressEngine.getInstance().stopDualLayerThinking(0.3);
+      StonicxMemoryIndexer.autoIndexSessionState();
+      MemorySyncBridge.getInstance().syncConversationTurn('STONICX', trimmed, reply).catch(() => {});
 
       // Play Gemini Charon PCM Audio if present, or invoke voice pipeline
       if (data.audioBase64) {
         stopCurrentSpeech();
+        voicePipelineRef.current.onSpeechStart();
+        AudioDuckingManager.getInstance().duck({ duckGain: 0.20, rampDownTimeSec: 0.15 });
+
         playPcmAudio(
           data.audioBase64,
           () => setStatus('SPEAKING'),
-          () => setStatus('READY')
+          () => {
+            setStatus('READY');
+            AudioDuckingManager.getInstance().restore({ rampUpTimeSec: 0.30 });
+            voicePipelineRef.current.onSpeechEnd();
+          }
         );
       } else {
         speakStonicxResponse(reply);
       }
 
     } catch (err: any) {
+      ThinkingProgressEngine.getInstance().stopDualLayerThinking(0.3);
       console.error('[STONICX Pipeline Error]', err);
       const errorMsg: ChatMessage = {
         id: `stx-err-${Date.now()}`,
@@ -451,6 +486,32 @@ Synthesize your response by applying the primed user profile, topic notes, and a
       setIsProcessing(false);
     }
   }, [profile, topicNotes, jobs, activeJobId, dailyLogs, personalConfig, speakStonicxResponse]);
+
+  // Synchronize submitPrompt with voice pipeline
+  useEffect(() => {
+    submitPromptRef.current = submitPrompt;
+  }, [submitPrompt]);
+
+  useEffect(() => {
+    const pipeline = voicePipelineRef.current;
+    pipeline.initialize({
+      onTranscript: (text) => {
+        setInputText(text);
+      },
+      onTurnComplete: (completedText) => {
+        if (completedText.trim()) {
+          submitPromptRef.current(completedText.trim());
+        }
+      },
+      onStatusChange: (newStatus) => {
+        setStatus(newStatus);
+      }
+    });
+
+    return () => {
+      pipeline.stop();
+    };
+  }, []);
 
   const clearChat = useCallback(() => {
     setMessages(INITIAL_STONICX_MESSAGES);

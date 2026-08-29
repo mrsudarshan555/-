@@ -268,6 +268,8 @@ export const CircuitBoardVisualizer: React.FC<CircuitBoardVisualizerProps> = ({
     const container = containerRef.current;
     if (!canvas || !container) return;
 
+    console.log('[STONICX Visualizer] Signal Bus Online -> 60 FPS locked');
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 

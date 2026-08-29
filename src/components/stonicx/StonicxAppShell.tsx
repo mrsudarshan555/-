@@ -14,6 +14,12 @@ import { useStonicxAssistant } from '../../hooks/useStonicxAssistant';
 import { UserPersonalConfig, AssistantConfig, PermissionItem } from '../../types';
 import { StonicxFullSettingsState } from '../../types/stonicxSettings';
 import { loadStonicxSettings, saveStonicxSettings } from '../../utils/stonicxSettingsStore';
+import { StonicxGestureActionEngine } from '../../services/stonicx/gestureActionEngine';
+import { MemoryVaultManager } from '../../services/memory/memoryVaultManager';
+import { FloatingDataCardLayer } from '../tools/FloatingDataCardLayer';
+import '../../services/stonicx/stonicxPowerTestHarness';
+import '../../services/tools/toolCallingTestHarness';
+import '../../services/stage/stageCanvasTestHarness';
 
 export type StonicxView = 'circuit' | 'terminal' | 'vault' | 'optical';
 
@@ -98,7 +104,7 @@ export const StonicxAppShell: React.FC<StonicxAppShellProps> = ({
     deleteJob,
     dailyLogs,
     deleteDailyLog
-  } = useStonicxAssistant({ personalConfig, assistantConfig });
+  } = useStonicxAssistant({ personalConfig, assistantConfig, onSwitchToMayra });
 
   const activeDisplayState = manualStateOverride || (
     status === 'LISTENING' ? 'listening' :
@@ -106,6 +112,27 @@ export const StonicxAppShell: React.FC<StonicxAppShellProps> = ({
     status === 'SPEAKING' ? 'speaking' :
     'idle'
   );
+
+  // Initialize Gesture-to-Workflow Action Engine
+  useEffect(() => {
+    const engine = StonicxGestureActionEngine.getInstance();
+    engine.initialize({
+      onExecutePayload: (targetId) => {
+        setActiveView('terminal');
+        submitPrompt(`Execute kernel script target ${targetId || 'default_workflow'} --run`);
+      },
+      onClearWorkspace: () => {
+        clearChat();
+      },
+      onToggleExecutionPause: (isPaused) => {
+        console.log(`[STONICX] Gesture execution state changed: ${isPaused ? 'PAUSED' : 'ACTIVE'}`);
+      }
+    });
+
+    return () => {
+      engine.cleanup();
+    };
+  }, [submitPrompt, clearChat]);
 
   const handleOpticalScanSubmit = (prompt: string, image: { base64: string; mimeType: string; name?: string }) => {
     setActiveView('terminal');
@@ -189,6 +216,14 @@ export const StonicxAppShell: React.FC<StonicxAppShellProps> = ({
               <span className="text-[10px] text-slate-300 font-mono tracking-tight">
                 {formatTimer(elapsedSeconds)}
               </span>
+              <span className="text-[10px] text-slate-500">•</span>
+              <span 
+                style={{ color: activePal.primary }}
+                className="text-[9px] font-mono tracking-tight bg-black/40 px-1.5 py-0.5 rounded border border-cyan-500/20"
+                title="Unified Shared Markdown Vault Status"
+              >
+                Vault: {MemoryVaultManager.getInstance().getTotalNotesCount()} Notes | Synced
+              </span>
             </div>
           </div>
         </div>
@@ -238,24 +273,37 @@ export const StonicxAppShell: React.FC<StonicxAppShellProps> = ({
           {/* Bottom-Right: Minimal HUD Navigation & Stream Trigger */}
           <div className="pointer-events-auto flex items-center gap-2.5 ml-auto">
             
-            {/* Direct Quick Mic Trigger Button */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                setManualStateOverride(null);
-                triggerVoice();
-              }}
-              style={{
-                backgroundColor: status === 'LISTENING' || activeDisplayState === 'listening' ? activePal.primary : 'rgba(2,11,26,0.9)',
-                color: status === 'LISTENING' || activeDisplayState === 'listening' ? '#000000' : activePal.primary,
-                borderColor: `${activePal.primary}40`
-              }}
-              className="p-3 rounded-2xl border transition-all cursor-pointer shadow-lg backdrop-blur-xl"
-              title="Activate Voice Stream"
-            >
-              <Mic className="w-4 h-4" />
-            </motion.button>
+            {/* Direct Quick Mic Trigger Button with Pulsating Audio HUD Stream */}
+            <div className="relative flex items-center">
+              {(status === 'LISTENING' || activeDisplayState === 'listening') && (
+                <div className="absolute -inset-1.5 rounded-2xl bg-cyan-400/20 blur-sm animate-ping pointer-events-none" />
+              )}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  setManualStateOverride(null);
+                  triggerVoice();
+                }}
+                style={{
+                  backgroundColor: status === 'LISTENING' || activeDisplayState === 'listening' ? activePal.primary : 'rgba(2,11,26,0.9)',
+                  color: status === 'LISTENING' || activeDisplayState === 'listening' ? '#000000' : activePal.primary,
+                  borderColor: `${activePal.primary}40`,
+                  boxShadow: status === 'LISTENING' || activeDisplayState === 'listening' ? `0 0 20px ${activePal.primary}80` : undefined
+                }}
+                className="relative p-3 rounded-2xl border transition-all cursor-pointer shadow-lg backdrop-blur-xl flex items-center gap-2"
+                title="Full-Duplex Reactive Mic Pipeline"
+              >
+                <Mic className="w-4 h-4" />
+                {(status === 'LISTENING' || activeDisplayState === 'listening') && (
+                  <div className="flex items-center gap-0.5 px-0.5">
+                    <span className="w-1 h-3 bg-black rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1 h-4 bg-black rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1 h-2.5 bg-black rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                )}
+              </motion.button>
+            </div>
 
             {/* Quick Whiteboard Trigger Button */}
             <motion.button
@@ -592,6 +640,9 @@ export const StonicxAppShell: React.FC<StonicxAppShellProps> = ({
           }}
         />
       )}
+
+      {/* 6. Autonomous Floating Data Cards Layer */}
+      <FloatingDataCardLayer />
     </div>
   );
 };

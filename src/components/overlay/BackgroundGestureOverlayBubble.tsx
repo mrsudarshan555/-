@@ -4,7 +4,7 @@ import {
   Hand, Mic, Camera, ShieldAlert, Sparkles, X, 
   Eye, Power, AlertCircle, RefreshCw, ChevronRight, Activity, Radio,
   MousePointer, ArrowUp, Clock, CheckCircle2, Sliders, ExternalLink,
-  Minimize2, Maximize2, Play, Flame, HelpCircle, Move
+  Minimize2, Maximize2, Play, Flame, HelpCircle, Move, Database
 } from 'lucide-react';
 import { MiniMayraAvatar } from '../character/MiniMayraAvatar';
 import { AssistantStatus, AppearanceConfig } from '../../types';
@@ -15,6 +15,7 @@ import { BarehandsTracker } from '../../services/gestures/barehandsTracker';
 import { BarehandsGestureState, GestureThrowPayload, GestureClapClearPayload, GestureFistHoldPayload } from '../../types/gestures';
 import { GestureEventBus } from '../../services/gestures/gestureEventBus';
 import { GestureVoiceBridge } from '../../services/gestures/gestureVoiceBridge';
+import { MemoryVaultManager } from '../../services/memory/memoryVaultManager';
 
 interface BackgroundGestureOverlayBubbleProps {
   isEnabled: boolean;
@@ -913,6 +914,22 @@ export const BackgroundGestureOverlayBubble: React.FC<BackgroundGestureOverlayBu
                   </div>
                   <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/50 text-rose-300 font-mono font-extrabold text-xs">
                     {todayUsageCount} actions
+                  </span>
+                </div>
+
+                {/* Unified Markdown Memory Vault Status Badge */}
+                <div className="p-2 rounded-xl bg-cyan-950/30 border border-cyan-500/30 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-300">
+                      <Database className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-white block">Shared Memory Vault</span>
+                      <span className="text-[8px] text-slate-400 font-mono">MAYRA ↔ STONICX Dual-Brain</span>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-mono font-bold text-[9px]">
+                    {MemoryVaultManager.getInstance().getTotalNotesCount()} Notes | Synced
                   </span>
                 </div>
 

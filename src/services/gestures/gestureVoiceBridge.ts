@@ -1,22 +1,24 @@
 import { BarehandsTracker } from './barehandsTracker';
 import { GestureUsageService } from './gestureUsageService';
+import { StageStateManager } from '../stage/stageStateManager';
+import { StagePhysicsEngine } from '../stage/stagePhysicsEngine';
 
 export interface VoiceGestureParseResult {
   isMatch: boolean;
-  intent: 'ON' | 'OFF' | null;
+  intent: 'ON' | 'OFF' | 'STAGE_OPEN' | 'STAGE_CLEAR' | null;
   command: string;
 }
 
 export interface VoiceGestureExecutionResult {
   handled: boolean;
-  intent: 'ON' | 'OFF' | null;
+  intent: 'ON' | 'OFF' | 'STAGE_OPEN' | 'STAGE_CLEAR' | null;
   replyText: string;
   isGestureActive: boolean;
 }
 
 /**
  * Voice Activation Bridge for MediaPipe Gesture System (Backtalk signal model)
- * Handles bidirectional voice triggers ("gesture chalu karo", "gesture band karo", etc.)
+ * Handles bidirectional voice triggers ("gesture chalu karo", "gesture band karo", "show workspace", "stage kholo", "clear canvas", "sab saaf karo", etc.)
  * with zero modification to 3D avatar layers or core personality.
  */
 export class GestureVoiceBridge {
@@ -68,6 +70,25 @@ export class GestureVoiceBridge {
     'mayra turn off gestures'
   ];
 
+  private static readonly STAGE_OPEN_PATTERNS: string[] = [
+    'show workspace',
+    'open workspace',
+    'stage kholo',
+    'open stage',
+    'workspace kholo',
+    'stage canvas',
+    'show stage'
+  ];
+
+  private static readonly STAGE_CLEAR_PATTERNS: string[] = [
+    'clear canvas',
+    'clear workspace',
+    'sab saaf karo',
+    'canvas saaf karo',
+    'workspace reset karo',
+    'reset canvas'
+  ];
+
   public static isSystemActive(): boolean {
     return this.isGestureSystemActive;
   }
@@ -104,6 +125,20 @@ export class GestureVoiceBridge {
       .trim()
       .replace(/[.,/#!$%^&*;:{}=\-_`~()?]/g, '')
       .replace(/\s+/g, ' ');
+
+    // Check Stage Open Intents
+    for (const pattern of this.STAGE_OPEN_PATTERNS) {
+      if (clean === pattern || clean.includes(pattern)) {
+        return { isMatch: true, intent: 'STAGE_OPEN', command: pattern };
+      }
+    }
+
+    // Check Stage Clear Intents
+    for (const pattern of this.STAGE_CLEAR_PATTERNS) {
+      if (clean === pattern || clean.includes(pattern)) {
+        return { isMatch: true, intent: 'STAGE_CLEAR', command: pattern };
+      }
+    }
 
     // Check ON Intents
     for (const pattern of this.ON_INTENT_PATTERNS) {
@@ -144,7 +179,31 @@ export class GestureVoiceBridge {
       transcript.includes('karo') ||
       transcript.includes('chalu') ||
       transcript.includes('band') ||
-      transcript.includes('kijiye');
+      transcript.includes('kijiye') ||
+      transcript.includes('kholo') ||
+      transcript.includes('saaf');
+
+    if (parsed.intent === 'STAGE_OPEN') {
+      StagePhysicsEngine.getInstance().setConfig({ isOpen: true });
+      const replyText = isHindi ? 'Virtual workspace khol diya hai.' : 'Virtual workspace stage opened.';
+      return {
+        handled: true,
+        intent: 'STAGE_OPEN',
+        replyText,
+        isGestureActive: this.isGestureSystemActive
+      };
+    }
+
+    if (parsed.intent === 'STAGE_CLEAR') {
+      StagePhysicsEngine.getInstance().handleClapClear();
+      const replyText = isHindi ? 'Workspace canvas saaf kar diya hai.' : 'Workspace canvas cleared.';
+      return {
+        handled: true,
+        intent: 'STAGE_CLEAR',
+        replyText,
+        isGestureActive: this.isGestureSystemActive
+      };
+    }
 
     if (parsed.intent === 'ON') {
       console.log(`[VoiceBridge] Command matched: "${parsed.command}" -> Camera Stream Initialized`);

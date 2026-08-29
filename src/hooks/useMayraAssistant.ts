@@ -18,18 +18,22 @@ import {
 } from '../utils/speechEngine';
 import { MayraSystemBridge } from '../services/native/MayraSystemIntegrationBridge';
 import { MemoryVaultService } from '../services/memory/memoryVaultService';
+import { MemorySyncBridge } from '../services/memory/memorySyncBridge';
+import { MemoryQueryEngine } from '../services/memory/memoryQueryEngine';
 import { ContinuousConversationEngine } from '../services/voice/continuousConversationEngine';
 import { MayraAgentEngine } from '../services/agent/agentEngine';
 import { GestureVoiceBridge } from '../services/gestures/gestureVoiceBridge';
+import { DelegationRouter } from '../services/router/delegationRouter';
 
 export interface UseMayraAssistantProps {
   personalConfig: UserPersonalConfig;
   assistantConfig: AssistantConfig;
   memories?: MemoryItem[];
   onExecuteAction?: (action: AppAction) => void;
+  onModeSwitch?: (mode: 'mayra' | 'stonicx') => void;
 }
 
-export function useMayraAssistant({ personalConfig, assistantConfig, memories = [], onExecuteAction }: UseMayraAssistantProps) {
+export function useMayraAssistant({ personalConfig, assistantConfig, memories = [], onExecuteAction, onModeSwitch }: UseMayraAssistantProps) {
   const [status, setStatus] = useState<AssistantStatus>('READY');
   const [isListeningMode, setIsListeningMode] = useState<boolean>(false);
   const [inputText, setInputText] = useState('');
@@ -415,7 +419,33 @@ export function useMayraAssistant({ personalConfig, assistantConfig, memories = 
 
     const lower = (trimmed || '').toLowerCase();
 
-    // 0. Voice-Activated Gesture Toggle Intent Bridge ("gesture chalu karo", "gesture band karo", etc.)
+    // 0. MAYRA <-> STONICX Autonomous Task Delegation & Direct Switch Router
+    if (!image && trimmed) {
+      const decision = await DelegationRouter.routePrompt({
+        prompt: trimmed,
+        currentPersona: 'MAYRA',
+        chatHistory: messages,
+        language: detected,
+        onModeSwitch
+      });
+
+      if (decision.shouldDelegate && decision.targetPersona === 'STONICX') {
+        const delegateMsgText = (detected === 'hi')
+          ? 'Yeh technical kaam main STONICX ko delegate kar rahi hoon.'
+          : 'I am delegating this technical task to STONICX.';
+        const assistantMsg: ChatMessage = {
+          id: `msg-m-delegate-${Date.now()}`,
+          sender: 'mayra',
+          text: delegateMsgText,
+          timestamp: Date.now()
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+        setStatus('READY');
+        return;
+      }
+    }
+
+    // 0.1 Voice-Activated Gesture Toggle Intent Bridge ("gesture chalu karo", "gesture band karo", etc.)
     if (!image) {
       const gestureIntent = GestureVoiceBridge.parseIntent(trimmed);
       if (gestureIntent.isMatch) {
@@ -533,7 +563,11 @@ export function useMayraAssistant({ personalConfig, assistantConfig, memories = 
     console.log(`[LIVE_WS_STATE] ReadyState: ${ws?.readyState}`);
 
     // Inject relevant memory context for HTTP fallback and live prompts
-    const memoryContext = MemoryVaultService.buildPromptContext(memories, trimmed, 4);
+    const legacyMemoryContext = MemoryVaultService.buildPromptContext(memories, trimmed, 4);
+    const vaultQuery = MemoryQueryEngine.getInstance().queryVault(trimmed, 'MAYRA');
+    const recalledVaultContext = MemoryQueryEngine.getInstance().formatQueryResultForPrompt(vaultQuery);
+    const sharedVaultSystemPrompt = MemorySyncBridge.getInstance().generateSystemContextPrompt('MAYRA');
+    const memoryContext = `${legacyMemoryContext}\n${sharedVaultSystemPrompt}\n${recalledVaultContext}`;
 
     const hasImagePayload = Boolean(image && image.base64);
     console.log(`[MAYRA_CLIENT_SEND_DISPATCH] Dispatching turn:`, {
@@ -595,6 +629,7 @@ export function useMayraAssistant({ personalConfig, assistantConfig, memories = 
           timestamp: Date.now()
         };
         setMessages((prev) => [...prev, assistantMsg]);
+        MemorySyncBridge.getInstance().syncConversationTurn('MAYRA', trimmed, reply).catch(() => {});
         if (data.audioBase64) {
           schedulePcm24kChunk(
             data.audioBase64,

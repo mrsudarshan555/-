@@ -7,6 +7,16 @@ import { useMayraAssistant } from './hooks/useMayraAssistant';
 import { useMayraPermissions } from './hooks/useMayraPermissions';
 import { useMayraSettings } from './hooks/useMayraSettings';
 import { OnboardingFlowModal } from './components/onboarding/OnboardingFlowModal';
+import { CipherGlitchOverlay } from './components/common/CipherGlitchOverlay';
+import './services/router/delegationTestHarness';
+import './services/stonicx/stonicxPowerTestHarness';
+import './services/audio/voicePipelineTestHarness';
+import './services/memory/memoryVaultTestHarness';
+import './services/tools/toolCallingTestHarness';
+import './services/stage/stageCanvasTestHarness';
+import { MemoryVaultManager } from './services/memory/memoryVaultManager';
+import { FloatingDataCardLayer } from './components/tools/FloatingDataCardLayer';
+import { BarehandsStageCanvas } from './components/stage/BarehandsStageCanvas';
 
 export default function App() {
   // Initial App Startup / Splash screen state
@@ -15,6 +25,9 @@ export default function App() {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   useEffect(() => {
+    // Initialize unified shared markdown memory vault
+    MemoryVaultManager.getInstance().initializeVault().catch(() => {});
+
     const timer1 = setTimeout(() => {
       setSplashFading(true);
     }, 1100);
@@ -240,7 +253,10 @@ export default function App() {
     personalConfig,
     assistantConfig,
     memories,
-    onExecuteAction: handleExecuteAction
+    onExecuteAction: handleExecuteAction,
+    onModeSwitch: (mode) => {
+      setAssistantConfig((prev) => ({ ...prev, activeMode: mode }));
+    }
   });
 
   const handleSelectRoutineAction = (action: string) => {
@@ -393,6 +409,15 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* 2. Autonomous Task Delegation & Persona Switch Cipher HUD */}
+      <CipherGlitchOverlay />
+
+      {/* 3. Autonomous Floating HUD Data Cards Layer */}
+      <FloatingDataCardLayer />
+
+      {/* 4. Phase H: Barehands Virtual Workspace & Interactive Stage Canvas */}
+      <BarehandsStageCanvas />
     </div>
   );
 }
