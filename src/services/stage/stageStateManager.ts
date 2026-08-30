@@ -254,13 +254,33 @@ export class StageStateManager {
       lower.includes('stage kholo') ||
       lower.includes('open stage') ||
       lower.includes('workspace kholo') ||
-      lower.includes('stage canvas')
+      lower.includes('stage canvas') ||
+      lower.includes('open canvas') ||
+      lower.includes('whiteboard kholo')
     ) {
       this.physicsEngine.setConfig({ isOpen: true });
       return true;
     }
 
-    // 2. CLEAR WORKSPACE TRIGGERS
+    // 2. CLOSE / HIDE WORKSPACE TRIGGERS
+    if (
+      lower.includes('close workspace') ||
+      lower.includes('close stage') ||
+      lower.includes('stage band karo') ||
+      lower.includes('workspace band karo') ||
+      lower.includes('hide workspace') ||
+      lower.includes('hide stage') ||
+      lower.includes('canvas band karo') ||
+      lower.includes('close canvas') ||
+      lower.includes('exit canvas') ||
+      lower.includes('exit stage') ||
+      lower.includes('whiteboard band karo')
+    ) {
+      this.physicsEngine.setConfig({ isOpen: false });
+      return true;
+    }
+
+    // 3. CLEAR WORKSPACE TRIGGERS
     if (
       lower.includes('clear canvas') ||
       lower.includes('clear workspace') ||

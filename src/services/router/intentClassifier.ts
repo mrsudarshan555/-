@@ -109,7 +109,38 @@ export const STONICX_TECHNICAL_KEYWORDS: string[] = [
   'blueprint'
 ];
 
-// 3. Technical code syntax patterns (regex checks)
+// 3. Clear Conversational & Companion Triggers
+export const COMPANION_TRIGGERS: string[] = [
+  'how are you',
+  'kaise ho',
+  'kaisi ho',
+  'kya haal',
+  'kya hal',
+  'kya chal raha hai',
+  'good morning',
+  'good night',
+  'good evening',
+  'good afternoon',
+  'shubh prabhat',
+  'shubh ratri',
+  'joke sunao',
+  'tell me a joke',
+  'kahani sunao',
+  'tell me a story',
+  'sing a song',
+  'gana gao',
+  'i love you',
+  'feeling sad',
+  'feeling happy',
+  'are you happy',
+  'are you sad',
+  'cheer me up',
+  'friend',
+  'feeling lonely',
+  'miss you'
+];
+
+// 4. Technical code syntax patterns (regex checks)
 const CODE_SYNTAX_PATTERNS = [
   /\bfunction\s*\(/i,
   /\bconst\s+[a-zA-Z0-9_$]+\s*=/i,
@@ -213,9 +244,42 @@ export class IntentClassifier {
 
     // Normalize confidence
     const confidence = Math.min(1.0, Math.max(0.1, technicalScore));
+    const isTechnical = technicalScore >= 0.40;
 
-    // Threshold decision: If technical score >= 0.40, delegate to STONICX
-    if (technicalScore >= 0.40) {
+    // Check for clear Companion/Emotional/Daily prompts
+    const matchedCompanion = COMPANION_TRIGGERS.find((t) => lower.includes(t));
+
+    // C. Autonomous Routing Decision based on current active persona
+    if (currentPersona === 'STONICX') {
+      // If currently STONICX:
+      // 1. If companion trigger is matched -> delegate/switch to MAYRA
+      if (matchedCompanion) {
+        return {
+          targetPersona: 'MAYRA',
+          track: 'COMPANION',
+          confidence: 0.90,
+          matchedKeywords: [matchedCompanion],
+          isDirectSwitch: false,
+          reason: `Companion request "${matchedCompanion}" routed to MAYRA`
+        };
+      }
+
+      // 2. All other queries (technical or general/ambiguous like "aaj mausam kaisa hai") remain with STONICX!
+      return {
+        targetPersona: 'STONICX',
+        track: isTechnical ? 'TECHNICAL' : 'GENERAL',
+        confidence: isTechnical ? parseFloat(confidence.toFixed(2)) : 0.85,
+        matchedKeywords,
+        isDirectSwitch: false,
+        reason: isTechnical
+          ? `Technical workload detected with keywords [${matchedKeywords.join(', ')}]`
+          : 'General query retained and answered directly by STONICX'
+      };
+    }
+
+    // If currently MAYRA:
+    // 1. If technical score meets threshold -> delegate to STONICX
+    if (isTechnical) {
       return {
         targetPersona: 'STONICX',
         track: 'TECHNICAL',
@@ -226,27 +290,16 @@ export class IntentClassifier {
       };
     }
 
-    // Check for Companion/Emotional/Daily prompts
-    const isCompanion = lower.includes('how are you') || 
-                        lower.includes('kaise ho') || 
-                        lower.includes('good morning') || 
-                        lower.includes('good night') || 
-                        lower.includes('friend') || 
-                        lower.includes('feel') || 
-                        lower.includes('kya haal') || 
-                        lower.includes('weather') || 
-                        lower.includes('mausam') || 
-                        lower.includes('joke') || 
-                        lower.includes('kahani') || 
-                        lower.includes('reminder');
-
+    // 2. All other queries (companion or general) remain with MAYRA
     return {
       targetPersona: 'MAYRA',
-      track: isCompanion ? 'COMPANION' : 'GENERAL',
+      track: matchedCompanion ? 'COMPANION' : 'GENERAL',
       confidence: parseFloat((1.0 - Math.min(0.5, technicalScore)).toFixed(2)),
-      matchedKeywords: isCompanion ? ['companion_indicators'] : [],
+      matchedKeywords: matchedCompanion ? [matchedCompanion] : [],
       isDirectSwitch: false,
-      reason: isCompanion ? 'Conversational / Companion request' : 'General non-technical request handled by MAYRA'
+      reason: matchedCompanion
+        ? `Conversational companion request "${matchedCompanion}" handled by MAYRA`
+        : 'General query handled directly by MAYRA'
     };
   }
 }

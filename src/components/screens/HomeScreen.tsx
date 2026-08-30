@@ -10,6 +10,7 @@ import { BarehandsCameraOverlay } from '../character/BarehandsCameraOverlay';
 import { MayraLogo } from '../common/MayraLogo';
 import { AttachmentBottomSheet, AttachmentItem } from '../common/AttachmentBottomSheet';
 import { getDynamicSuggestions } from '../../utils/dynamicSuggestions';
+import { StagePhysicsEngine } from '../../services/stage/stagePhysicsEngine';
 import { 
   Settings as SettingsIcon, Send, Paperclip, 
   Sparkles, ScreenShare, Lock, Unlock, FileText, 
@@ -99,9 +100,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [isAttachmentSheetOpen, setIsAttachmentSheetOpen] = useState<boolean>(false);
   const [isProactivePromptActive, setIsProactivePromptActive] = useState<boolean>(false);
   const [isSwitcherOpen, setIsSwitcherOpen] = useState<boolean>(false);
+  const [isStageCanvasOpen, setIsStageCanvasOpen] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const physics = StagePhysicsEngine.getInstance();
+    const unsub = physics.subscribeConfig((config) => {
+      setIsStageCanvasOpen(!!config.isOpen);
+    });
+    return () => unsub();
+  }, []);
 
   const handleToggleLock = () => {
     toggleLock();
@@ -539,8 +549,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 whileHover={{ scale: 1.15 }}
                 whileTap={{ scale: 0.88 }}
                 onClick={onOpenWhiteboard}
-                className="p-1 bg-transparent border-0 text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
-                title="Interactive Whiteboard Tool"
+                className={`p-1 bg-transparent border-0 transition-colors cursor-pointer ${
+                  isStageCanvasOpen
+                    ? 'text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.9)] scale-110'
+                    : 'text-slate-300 hover:text-cyan-300'
+                }`}
+                title={isStageCanvasOpen ? 'Close Stage Canvas (Whiteboard)' : 'Open Stage Canvas (Whiteboard)'}
               >
                 <PenTool className="w-4 h-4 stroke-[1.8]" />
               </motion.button>

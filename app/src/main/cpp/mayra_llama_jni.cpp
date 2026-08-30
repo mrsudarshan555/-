@@ -29,7 +29,12 @@ Java_com_mayra_assistant_engine_MayraNativeLLMEngine_nativeIsAvailable(
     JNIEnv* env,
     jobject /* thiz */
 ) {
+#if defined(HAVE_REAL_LLAMA) && (HAVE_REAL_LLAMA == 1)
     return JNI_TRUE;
+#else
+    LOGW("nativeIsAvailable: Prebuilt libllama.so/libggml.so not linked in build. Reporting unavailable.");
+    return JNI_FALSE;
+#endif
 }
 
 JNIEXPORT jboolean JNICALL
@@ -41,6 +46,10 @@ Java_com_mayra_assistant_engine_MayraNativeLLMEngine_nativeLoadModel(
     jint nGpuLayers,
     jint contextSize
 ) {
+#if !defined(HAVE_REAL_LLAMA) || (HAVE_REAL_LLAMA == 0)
+    LOGE("nativeLoadModel: Real llama.cpp binaries (libllama.so, libggml.so) not linked. Cannot execute GGUF weights. Offline mode unavailable.");
+    return JNI_FALSE;
+#else
     if (!g_engine) {
         g_engine = std::make_unique<mayra::LlamaEngine>();
     }
@@ -56,7 +65,11 @@ Java_com_mayra_assistant_engine_MayraNativeLLMEngine_nativeLoadModel(
 
     LOGI("nativeLoadModel starting llama_model_load_from_file: %s", path.c_str());
     bool success = g_engine->loadModel(path, options);
+    if (!success) {
+        LOGE("nativeLoadModel: Model loading failed for %s", path.c_str());
+    }
     return success ? JNI_TRUE : JNI_FALSE;
+#endif
 }
 
 JNIEXPORT jboolean JNICALL

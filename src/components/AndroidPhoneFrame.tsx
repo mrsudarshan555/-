@@ -28,6 +28,7 @@ import { useAppLock } from './security/useAppLock';
 import { AppLockModal } from './security/AppLockModal';
 import { RoutinesModal } from './routines/RoutinesModal';
 import { HomeScreenWidgetModal } from './widgets/HomeScreenWidgetModal';
+import { StagePhysicsEngine } from '../services/stage/stagePhysicsEngine';
 
 interface AndroidPhoneFrameProps {
   activeTab: ActiveTab;
@@ -375,6 +376,11 @@ export const AndroidPhoneFrame: React.FC<AndroidPhoneFrameProps> = ({
                     onSelectAction={onSelectRoutineAction}
                     onOpenSettings={handleOpenSettingsWithSpring}
                     onOpenPermissions={handleOpenPermissions}
+                    onOpenWhiteboard={() => {
+                      const physics = StagePhysicsEngine.getInstance();
+                      const current = physics.getConfig();
+                      physics.setConfig({ isOpen: !current.isOpen });
+                    }}
                     onOpenRoutines={() => setIsRoutinesOpen(true)}
                     onOpenWidgetGuide={() => setIsWidgetGuideOpen(true)}
                     proactiveEnabled={(assistantConfig as any)?.proactiveSuggestions ?? true}

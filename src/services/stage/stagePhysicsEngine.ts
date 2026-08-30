@@ -28,7 +28,7 @@ export class StagePhysicsEngine {
   private cards: Map<string, SpatialCard> = new Map();
   private particles: StageParticle[] = [];
   private config: StageCanvasConfig = {
-    isOpen: true,
+    isOpen: false,
     gravity: 0,
     friction: 0.92, // 0.92 decay factor per frame
     throwVelocityThreshold: 1.2, // 1.2 px/ms release velocity

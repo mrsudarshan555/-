@@ -19,7 +19,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, Grid, Plus, Terminal, FileText, RotateCcw, 
-  Lock, Unlock, Eye, EyeOff, Activity, Hand, Move, Layers 
+  Lock, Unlock, Eye, EyeOff, Activity, Hand, Move, Layers, X 
 } from 'lucide-react';
 import { SpatialCard, StageParticle, StageCanvasConfig } from '../../services/stage/types';
 import { StagePhysicsEngine } from '../../services/stage/stagePhysicsEngine';
@@ -31,7 +31,7 @@ import { BarehandsGestureState } from '../../types/gestures';
 export const BarehandsStageCanvas: React.FC = () => {
   const [cards, setCards] = useState<SpatialCard[]>([]);
   const [config, setConfig] = useState<StageCanvasConfig>({
-    isOpen: true,
+    isOpen: false,
     gravity: 0,
     friction: 0.92,
     throwVelocityThreshold: 1.2,
@@ -113,17 +113,9 @@ export const BarehandsStageCanvas: React.FC = () => {
     };
   }, []);
 
+  // When closed, render nothing so character is completely clear and unobstructed
   if (!config.isOpen) {
-    return (
-      <button
-        onClick={() => physics.setConfig({ isOpen: true })}
-        className="fixed bottom-24 right-6 z-40 px-3.5 py-2 rounded-xl bg-[#090b14]/90 border border-cyan-500/30 text-cyan-300 text-xs font-mono font-bold flex items-center gap-2 backdrop-blur-md shadow-[0_0_25px_rgba(6,182,212,0.3)] hover:scale-105 transition-all"
-        title="Open Barehands Stage Workspace"
-      >
-        <Layers className="w-4 h-4 text-cyan-400" />
-        <span>WORKSPACE STAGE</span>
-      </button>
-    );
+    return null;
   }
 
   const handleCardUpdate = (updatedCard: SpatialCard) => {
@@ -157,7 +149,7 @@ export const BarehandsStageCanvas: React.FC = () => {
     : null;
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-30 overflow-hidden select-none">
+    <div className="fixed inset-0 pointer-events-none z-40 overflow-hidden select-none">
       {/* 1. Spatial Cybernetic Grid Background */}
       {config.showGrid && (
         <div 
@@ -218,7 +210,7 @@ export const BarehandsStageCanvas: React.FC = () => {
       )}
 
       {/* 5. Translucent Floating Spatial Workspace Toolbar */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto z-50 flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#080912]/85 backdrop-blur-xl border border-cyan-500/30 shadow-[0_0_30px_rgba(0,0,0,0.7)]">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto z-50 flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#080912]/90 backdrop-blur-xl border border-cyan-500/30 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
         {/* Workspace Title & Indicator */}
         <div className="flex items-center gap-2 pr-2.5 border-r border-white/10">
           <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#06b6d4] animate-pulse" />
@@ -235,7 +227,7 @@ export const BarehandsStageCanvas: React.FC = () => {
         {/* Action: Add Note */}
         <button
           onClick={() => stateManager.spawnNoteCard()}
-          className="px-2.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 text-[10px] font-mono font-bold flex items-center gap-1.5 transition-colors"
+          className="px-2.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 text-[10px] font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
           title="Add Markdown Note"
         >
           <FileText className="w-3 h-3 text-purple-400" />
@@ -245,7 +237,7 @@ export const BarehandsStageCanvas: React.FC = () => {
         {/* Action: Spawn Code Runner */}
         <button
           onClick={() => stateManager.spawnCodeCard()}
-          className="px-2.5 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-mono font-bold flex items-center gap-1.5 transition-colors"
+          className="px-2.5 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
           title="Spawn Code Terminal"
         >
           <Terminal className="w-3 h-3 text-cyan-400" />
@@ -255,7 +247,7 @@ export const BarehandsStageCanvas: React.FC = () => {
         {/* Action: Auto-Arrange Grid */}
         <button
           onClick={() => stateManager.autoArrangeGrid()}
-          className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/10 border border-white/10 text-slate-300 text-[10px] font-mono font-bold flex items-center gap-1.5 transition-colors"
+          className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/10 border border-white/10 text-slate-300 text-[10px] font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
           title="Auto-Arrange Bento Grid"
         >
           <Grid className="w-3 h-3 text-cyan-400" />
@@ -265,7 +257,7 @@ export const BarehandsStageCanvas: React.FC = () => {
         {/* Action: Freeze / Fist Lock */}
         <button
           onClick={toggleFreeze}
-          className={`p-1.5 rounded-xl border transition-colors ${
+          className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
             config.isFrozen
               ? 'bg-amber-500/20 border-amber-400/40 text-amber-300'
               : 'bg-white/[0.04] border-white/10 text-slate-300 hover:bg-white/10'
@@ -278,21 +270,32 @@ export const BarehandsStageCanvas: React.FC = () => {
         {/* Action: Reset Canvas */}
         <button
           onClick={() => stateManager.resetWorkspace()}
-          className="p-1.5 rounded-xl bg-white/[0.04] hover:bg-rose-950/30 border border-white/10 hover:border-rose-500/40 text-slate-300 hover:text-rose-400 transition-colors"
-          title="Reset Workspace (or Gesture Clap)"
+          className="p-1.5 rounded-xl bg-white/[0.04] hover:bg-rose-950/30 border border-white/10 hover:border-rose-500/40 text-slate-300 hover:text-rose-400 transition-colors cursor-pointer"
+          title="Reset Workspace"
         >
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
 
-        {/* Action: Minimize Stage */}
+        {/* Action: Prominent Clear Exit / Close Canvas Button */}
         <button
           onClick={() => physics.setConfig({ isOpen: false })}
-          className="p-1.5 rounded-xl bg-white/[0.04] hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-colors"
-          title="Minimize Workspace"
+          className="px-2.5 py-1.5 rounded-xl bg-rose-600/25 hover:bg-rose-600/40 border border-rose-500/50 text-rose-200 hover:text-white text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(244,63,94,0.25)] cursor-pointer"
+          title="Close Stage Canvas & Return to Character View"
         >
-          <EyeOff className="w-3.5 h-3.5" />
+          <X className="w-3.5 h-3.5 text-rose-400" />
+          <span>Exit Canvas</span>
         </button>
       </div>
+
+      {/* Dedicated Floating Top-Right Exit Button */}
+      <button
+        onClick={() => physics.setConfig({ isOpen: false })}
+        className="absolute top-4 right-4 pointer-events-auto z-50 px-3 py-1.5 rounded-xl bg-[#080912]/90 hover:bg-rose-950/60 border border-rose-500/40 text-rose-300 hover:text-white text-[11px] font-mono font-bold flex items-center gap-1.5 backdrop-blur-xl shadow-lg transition-all cursor-pointer group"
+        title="Exit Stage Canvas Mode"
+      >
+        <X className="w-4 h-4 text-rose-400 group-hover:rotate-90 transition-transform" />
+        <span>Exit Stage</span>
+      </button>
     </div>
   );
 };

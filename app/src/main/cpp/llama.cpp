@@ -123,17 +123,8 @@ struct llama_model * llama_model_load_from_file(
 ) {
     if (!path_model) return nullptr;
 
-    auto * model = new llama_model();
-    model->path = path_model;
-    model->params = params;
-    model->n_vocab = 32000;
-    model->bos = 1;
-    model->eos = 2;
-    model->eot = 32000;
-    model->nl  = 13;
-
-    LOGI("llama_model_load_from_file: Loaded model handle for %s", path_model);
-    return model;
+    LOGE("llama_model_load_from_file: Real llama.cpp tensor execution engine (libllama.so/libggml.so) not linked. Cannot load '%s'. See SETUP_OFFLINE_MODEL.md.", path_model);
+    return nullptr;
 }
 
 void llama_free_model(struct llama_model * model) {

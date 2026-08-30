@@ -66,6 +66,15 @@ export class DelegationTestHarness {
     // Test 6: Technical Keywords & Syntax Parsing
     results.push(await this.testTechnicalKeywordParsing());
 
+    // Test 7: General Query to STONICX -> Retains STONICX
+    results.push(await this.testStonicxGeneralQueryRetainsStonicx());
+
+    // Test 8: Companion Query to STONICX -> Routes to MAYRA
+    results.push(await this.testStonicxCompanionQueryRoutesToMayra());
+
+    // Test 9: Technical Query to STONICX -> Retains STONICX
+    results.push(await this.testStonicxTechnicalQueryRetainsStonicx());
+
     const total = results.length;
     const passed = results.filter((r) => r.passed).length;
     const failed = total - passed;
@@ -220,6 +229,69 @@ export class DelegationTestHarness {
       passed,
       input: { prompt },
       output: { target: result.targetPersona, track: result.track, confidence: result.confidence },
+      expected: { target: 'STONICX', track: 'TECHNICAL' },
+      durationMs: Date.now() - t0
+    };
+  }
+
+  // Test 7: General Query to STONICX -> Retains STONICX
+  public static async testStonicxGeneralQueryRetainsStonicx(): Promise<TestCaseResult> {
+    const t0 = Date.now();
+    const prompt = 'aaj mausam kaisa hai aur time kya hua hai?';
+    
+    const result = IntentClassifier.classifyIntent(prompt, 'STONICX');
+    const passed = result.targetPersona === 'STONICX' && 
+                   result.track === 'GENERAL' && 
+                   !result.isDirectSwitch;
+
+    return {
+      testId: 'TEST_7_STONICX_GENERAL_RETAIN',
+      name: 'General non-technical query to STONICX stays with STONICX',
+      passed,
+      input: { prompt, currentPersona: 'STONICX' },
+      output: { target: result.targetPersona, track: result.track, confidence: result.confidence },
+      expected: { target: 'STONICX', track: 'GENERAL' },
+      durationMs: Date.now() - t0
+    };
+  }
+
+  // Test 8: Companion Query to STONICX -> Routes to MAYRA
+  public static async testStonicxCompanionQueryRoutesToMayra(): Promise<TestCaseResult> {
+    const t0 = Date.now();
+    const prompt = 'kaise ho, ek mazedaar joke sunao';
+    
+    const result = IntentClassifier.classifyIntent(prompt, 'STONICX');
+    const passed = result.targetPersona === 'MAYRA' && 
+                   result.track === 'COMPANION' && 
+                   !result.isDirectSwitch;
+
+    return {
+      testId: 'TEST_8_STONICX_COMPANION_DELEGATE',
+      name: 'Explicit companion query to STONICX routes to MAYRA',
+      passed,
+      input: { prompt, currentPersona: 'STONICX' },
+      output: { target: result.targetPersona, track: result.track, matchedKeywords: result.matchedKeywords },
+      expected: { target: 'MAYRA', track: 'COMPANION' },
+      durationMs: Date.now() - t0
+    };
+  }
+
+  // Test 9: Technical Query to STONICX -> Retains STONICX
+  public static async testStonicxTechnicalQueryRetainsStonicx(): Promise<TestCaseResult> {
+    const t0 = Date.now();
+    const prompt = 'is code mein bug dhundo aur algorithm optimize karo';
+    
+    const result = IntentClassifier.classifyIntent(prompt, 'STONICX');
+    const passed = result.targetPersona === 'STONICX' && 
+                   result.track === 'TECHNICAL' && 
+                   !result.isDirectSwitch;
+
+    return {
+      testId: 'TEST_9_STONICX_TECHNICAL_RETAIN',
+      name: 'Technical query to STONICX stays with STONICX',
+      passed,
+      input: { prompt, currentPersona: 'STONICX' },
+      output: { target: result.targetPersona, track: result.track, matchedKeywords: result.matchedKeywords },
       expected: { target: 'STONICX', track: 'TECHNICAL' },
       durationMs: Date.now() - t0
     };
