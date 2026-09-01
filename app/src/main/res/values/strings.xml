@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">MAYRA</string>
-    <string name="accessibility_service_description">Enables MAYRA to assist with app navigation, pre-filling text, hands-free actions, and message automation.</string>
-    <string name="gesture_accessibility_service_description">Enables MAYRA system-wide touchless hand-gesture control to dispatch taps, scrolls, and long-presses via camera tracking.</string>
-    <string name="notification_service_description">Allows MAYRA to read incoming messages and announce caller names safely.</string>
-</resources>
